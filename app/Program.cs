@@ -141,7 +141,7 @@ app.Use(async (context, next) =>
     var publicEndpoint = path == "/api/session" || path == "/api/auth/login" || path == "/api/auth/metasys/login" || path == "/api/auth/setup" || path == "/api/auth/metasys/bootstrap";
     if (!publicEndpoint && context.User.Identity?.IsAuthenticated != true)
     { context.Response.StatusCode = 401; await context.Response.WriteAsJsonAsync(new { error = "Sign in to continue." }); return; }
-    var requiresAdmin = path.StartsWithSegments("/api/connections") || path.StartsWithSegments("/api/auth/users");
+    var requiresAdmin = path.StartsWithSegments("/api/connections") || path.StartsWithSegments("/api/auth/users") || path.StartsWithSegments("/api/metasys");
     if (requiresAdmin && !context.User.IsInRole("Admin"))
     { context.Response.StatusCode = 403; await context.Response.WriteAsJsonAsync(new { error = "Administrator permission is required." }); return; }
     if (context.Request.Method is not ("GET" or "HEAD"))
@@ -158,7 +158,7 @@ app.Use(async (context, next) =>
         _ => false
     };
     if(loginOnly&&builder.Configuration.GetValue<bool>("Acceptance:AllowExtendedConfiguration")&&
-        (path.StartsWithSegments("/api/connections")||path.StartsWithSegments("/api/mappings")))
+        (path.StartsWithSegments("/api/connections")||path.StartsWithSegments("/api/mappings")||path.StartsWithSegments("/api/metasys")))
         connectionAction=true;
     if (loginOnly && !(allowConnectionTests && connectionAction) && context.Request.Method is not ("GET" or "HEAD") && !path.StartsWithSegments("/api/auth")
 #if POINT_BRIDGE_AUTH_FIXTURES

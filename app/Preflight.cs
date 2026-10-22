@@ -112,14 +112,19 @@ public static class Preflight
             Units = metadata?["item"]?["units"]?.ToString(),
             Reliability = attribute?["condition"]?["presentValue"]?["reliability"]?.ToString()
                 ?? metadata?["item"]?["reliability"]?.ToString(),
+            Priority = attribute?["condition"]?["presentValue"]?["priority"]?.ToString()
+                ?? metadata?["condition"]?["presentValue"]?["priority"]?.ToString(),
             Schema = expanded
         };
         if (writable)
         {
-            var attributes = await api.Get($"objects/{id}/attributes?attributeFilter=writableBasic", ct);
-            info.Writable = attributes?["schema"]?["properties"]?["presentValue"] != null
+            var attributes = await api.Get($"objects/{id}/attributes" + (api.ApiVersion == "v4" ? "" : "?attributeFilter=writableBasic"), ct);
+            var attributeSchema = attributes?["schema"]?["properties"]?["presentValue"];
+            info.Writable = attributeSchema != null
                 && schema?["readOnly"]?.ToString() != "true"
-                && metadata?["effectivePermissions"]?["canModify"]?.ToString() != "false";
+                && attributeSchema["readOnly"]?.ToString() != "true"
+                && metadata?["effectivePermissions"]?["canModify"]?.ToString() == "true"
+                && (api.ApiVersion != "v4" || attributeSchema["prioritized"]?.ToString() != "true");
         }
         return info;
     }
@@ -145,6 +150,17 @@ public static class Preflight
                 && tuple?.Count == 1 && SchemaRules.Type(tuple[0]) is "number" or "integer" or "boolean" or "string"
                 && (parameters?["maxItems"]?.GetValue<int>() ?? 1) == 1;
             command.Reason = command.Supported ? "" : "This command is not a direct scalar adjust command with exactly one value parameter.";
+            if (response is JsonObject && response["effectivePermissions"]?["canInvoke"] is JsonArray permitted
+                && !permitted.Any(permission => permission?.ToString() == command.Id))
+            {
+                command.Supported = false;
+                command.Reason = "The API account does not have permission to invoke this command.";
+            }
+            if (response is not JsonObject || response["effectivePermissions"]?["canInvoke"] is not JsonArray)
+            {
+                command.Supported = false;
+                command.Reason = "The server did not confirm command permissions for this API account.";
+            }
             if (command.Supported && command.CommandBodySchema?["required"] is JsonArray required)
             {
                 var unknown = required.Select(x => x?.ToString()).Where(x => x is not ("parameters" or "annotation" or "priority")).ToArray();

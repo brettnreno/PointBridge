@@ -9,6 +9,7 @@
     <Compile Include="../app/Models.cs" Link="Production/Models.cs" />
     <Compile Include="../app/Store.cs" Link="Production/Store.cs" />
     <Compile Include="../app/Api.cs" Link="Production/Api.cs" />
+    <Compile Include="../app/MetasysExplorer.cs" Link="Production/MetasysExplorer.cs" />
     <Compile Include="../app/Bridge.cs" Link="Production/Bridge.cs" />
     <Compile Include="../app/RecoveryJournal.cs" Link="Production/RecoveryJournal.cs" />
     <Compile Include="../app/Troubleshooting.cs" Link="Production/Troubleshooting.cs" />

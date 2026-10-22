@@ -61,21 +61,41 @@ public sealed class FixtureApiStore(Microsoft.AspNetCore.DataProtection.IDataPro
 public sealed class FixtureApiTransport : HttpMessageHandler
 {
     public static int LoginCalls,PointWrites;
-    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
     {
         if (request.RequestUri?.Host is not ("fixture-api.invalid" or "fixture-api-two.invalid"))
             throw new InvalidOperationException("Unexpected fixture API request; no real network transport exists.");
+        const string point="52cfddc0-411f-5b9e-9a6d-442cb62fecbb";
+        var version=request.RequestUri.AbsolutePath.Split('/')[2];
+        HttpResponseMessage Reply(string json)=>new(System.Net.HttpStatusCode.OK){Content=new StringContent(json,System.Text.Encoding.UTF8,"application/json")};
+        if(request.Method==HttpMethod.Post&&request.RequestUri.AbsolutePath.EndsWith("/objects/batch"))
+        {
+            var batch=System.Text.Json.Nodes.JsonNode.Parse(await request.Content!.ReadAsStringAsync(ct));
+            if(batch?["method"]?.ToString()!="GET")throw new InvalidOperationException("Only read batches allowed by fixture.");
+            var responses=new System.Text.Json.Nodes.JsonArray();
+            foreach(var operation in batch!["requests"]!.AsArray())
+            {
+                if(operation?["relativeUrl"]?.ToString()!=point+"/attributes/presentValue")throw new InvalidOperationException("Unexpected batch target.");
+                responses.Add(new System.Text.Json.Nodes.JsonObject{["id"]=operation["id"]!.ToString(),["status"]=200,
+                    ["body"]=System.Text.Json.Nodes.JsonNode.Parse("{\"item\":{\"presentValue\":20},\"condition\":{\"presentValue\":{\"reliability\":\"reliabilityEnumSet.reliable\",\"priority\":\"writePriorityEnumSet.priorityDefault\"}},\"password\":\"fixture-sensitive-value-never-display\"}")});
+            }
+            return Reply(new System.Text.Json.Nodes.JsonObject{["responses"]=responses}.ToJsonString());
+        }
         if(request.Method==HttpMethod.Get)
         {
             var path=request.RequestUri.AbsolutePath;
+            if(path.EndsWith("/samples"))return Reply(version=="v4"?"{\"items\":[{\"timestamp\":\"2026-10-22T12:00:00Z\",\"value\":{\"value\":20,\"units\":\"unitEnumSet.degC\"},\"isReliable\":true}],\"next\":null}":"{\"items\":[{\"sampleTime\":\"2026-10-22T12:00:00Z\",\"value\":20,\"reliability\":\"reliabilityEnumSet.reliable\"}]}");
+            if(path.EndsWith("/activities"))return Reply("{\"items\":[{\"id\":\"fixture-activity\",\"creationTime\":\"2026-10-22T12:00:00Z\",\"objectName\":\"Fixture temperature\",\"activityManagementStatus\":\"pending\",\"alarm\":{\"type\":\"alarmValueEnumSet.avHighLimit\",\"priority\":2},\"audit\":{\"actionType\":\"auditActionTypeEnumSet.writeAuditActionType\",\"user\":\"fixture-sensitive-value-never-display\",\"postData\":\"fixture-sensitive-value-never-display\"}}],\"next\":null}");
+            if(path.EndsWith("/points"))return Reply("{\"items\":[{\"id\":\"32cfddc0-411f-5b9e-9a6d-442cb62fecbb\",\"label\":\"Fixture temperature\",\"objectUrl\":\"https://"+request.RequestUri.Host+"/api/"+version+"/objects/"+point+"\",\"attribute\":\"presentValue\"}],\"next\":null}");
+            if(path.EndsWith("/equipment")||path.EndsWith("/spaces")||path.EndsWith("/networkDevices"))return Reply("{\"items\":[{\"id\":\""+point+"\",\"name\":\"Fixture "+path.Split('/').Last()+"\"}],\"next\":null}");
             var schema="{\"type\":\"object\",\"properties\":{\"presentValue\":{\"type\":\"number\",\"minimum\":0,\"maximum\":100}}}";
             var body=path.EndsWith("/commands")?"{\"items\":[]}":path.EndsWith("/objects")?"{\"items\":[{\"id\":\"52cfddc0-411f-5b9e-9a6d-442cb62fecbb\",\"name\":\"Fixture point\"}]}":"{\"item\":{\"name\":\"Fixture point\",\"units\":\"unitEnumSet.degC\",\"presentValue\":20},\"effectivePermissions\":{\"canModify\":true},\"schema\":"+schema+"}";
-            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK){Content=new StringContent(body,System.Text.Encoding.UTF8,"application/json")});
+            return Reply(body);
         }
         if(request.Method!=HttpMethod.Post||!request.RequestUri.AbsolutePath.EndsWith("/login"))
         {Interlocked.Increment(ref PointWrites);throw new InvalidOperationException("Point writes forbidden by fixture.");}
         Interlocked.Increment(ref LoginCalls);
-        return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent("{\"accessToken\":\"fixture-api-token-not-real\",\"expires\":\"2099-01-01T00:00:00Z\"}", System.Text.Encoding.UTF8, "application/json") });
+        return new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent("{\"accessToken\":\"fixture-api-token-not-real\",\"expires\":\"2099-01-01T00:00:00Z\"}", System.Text.Encoding.UTF8, "application/json") };
     }
 }
 public sealed class FixtureJsonTransport:HttpMessageHandler

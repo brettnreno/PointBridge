@@ -4,7 +4,9 @@ public class Api : IDisposable
     readonly HttpClient http;
     readonly Connection c;
     readonly string password;
+    readonly TimeProvider clock;
     public string Origin => c.BaseUrl.TrimEnd('/');
+    public string ApiVersion => c.ApiVersion;
     string? token;
     DateTimeOffset expires = DateTimeOffset.MinValue;
     readonly SemaphoreSlim authGate = new(1);
@@ -13,9 +15,9 @@ public class Api : IDisposable
     public int CleanupFailures { get; private set; }
     public Api(Connection c, string p) : this(c, p, new HttpClient(new HttpClientHandler
         { AllowAutoRedirect=false, UseCookies=false, UseDefaultCredentials=false }) { Timeout = TimeSpan.FromSeconds(30) }) { }
-    public Api(Connection c, string p, HttpClient client)
+    public Api(Connection c, string p, HttpClient client, TimeProvider? clock = null)
     {
-        this.c = c; password = p; http = client;
+        this.c = c; password = p; http = client; this.clock = clock ?? TimeProvider.System;
         http.BaseAddress = new Uri(c.BaseUrl.TrimEnd('/') + "/api/" + c.ApiVersion + "/");
     }
     static void Ensure(HttpResponseMessage r)
@@ -27,17 +29,77 @@ public class Api : IDisposable
         await authGate.WaitAsync(ct);
         try
         {
-            using var r = await http.PostAsJsonAsync("login", new { username = c.Username, password }, ct);
-            Ensure(r);
-            var j = JsonNode.Parse(await r.Content.ReadAsStringAsync(ct));
-            token = j?["accessToken"]?.GetValue<string>() ?? throw new Exception("Login returned no token.");
-            expires = DateTimeOffset.TryParse(j?["expires"]?.ToString(), out var end) ? end : DateTimeOffset.UtcNow.AddMinutes(5);
+            await LoginCore(ct);
         }
         finally { authGate.Release(); }
     }
     async Task Authenticate(CancellationToken ct)
     {
-        if (token == null || DateTimeOffset.UtcNow >= expires.AddSeconds(-30)) await Login(ct);
+        if (token != null && clock.GetUtcNow() < expires.AddSeconds(-30)) return;
+        await authGate.WaitAsync(ct);
+        try
+        {
+            if (token != null && clock.GetUtcNow() < expires.AddSeconds(-30)) return;
+            if (token != null && clock.GetUtcNow() < expires)
+            {
+                using var request = Request(HttpMethod.Get, "refreshToken");
+                using var response = await Send(request, ct);
+                if (response.StatusCode != System.Net.HttpStatusCode.Unauthorized)
+                {
+                    Ensure(response);
+                    await AcceptToken(response, ct);
+                    return;
+                }
+            }
+            token = null;
+            await LoginCore(ct);
+        }
+        finally { authGate.Release(); }
+    }
+    async Task LoginCore(CancellationToken ct)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "login") { Content = JsonContent.Create(new { username = c.Username, password }) };
+        using var response = await Send(request, ct);
+        Ensure(response);
+        await AcceptToken(response, ct);
+    }
+    async Task AcceptToken(HttpResponseMessage response, CancellationToken ct)
+    {
+        var body = await ReadJson(response, ct);
+        var next = body?["accessToken"]?.GetValue<string>();
+        if (string.IsNullOrWhiteSpace(next) || !DateTimeOffset.TryParse(body?["expires"]?.ToString(), out var end)
+            || end <= clock.GetUtcNow()) throw new IOException("Metasys returned an invalid or expired access token.");
+        token = next;
+        expires = end;
+    }
+    public async Task<JsonNode?> ReadBatch(IEnumerable<string> objectIds, CancellationToken ct)
+    {
+        var identifiers = objectIds.Distinct().ToArray();
+        if (identifiers.Length is < 1 or > 50 || identifiers.Any(identifier => !Guid.TryParse(identifier, out _)))
+            throw new ArgumentException("Choose between 1 and 50 object GUIDs for a read-only batch.");
+        var requests = new JsonArray(identifiers.Select(identifier => (JsonNode)new JsonObject
+            { ["id"] = identifier, ["relativeUrl"] = identifier + "/attributes/presentValue" }).ToArray());
+        await Authenticate(ct);
+        using var request = Request(HttpMethod.Post, "objects/batch");
+        request.Content = JsonContent.Create(new JsonObject { ["method"] = "GET", ["requests"] = requests });
+        using var response = await Send(request, ct);
+        Ensure(response);
+        return await ReadJson(response, ct);
+    }
+    async Task<HttpResponseMessage> Send(HttpRequestMessage request, CancellationToken ct)
+    {
+        try { return await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct); }
+        catch (HttpRequestException exception) when (exception.InnerException is System.Security.Authentication.AuthenticationException)
+        {
+            throw new IOException("Metasys HTTPS certificate validation failed. Use the hostname on the certificate, verify its validity, and install the issuing CA in this machine's trusted certificate store. Certificate checks remain enabled.");
+        }
+    }
+    static async Task<JsonNode?> ReadJson(HttpResponseMessage response, CancellationToken ct)
+    {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        deadline.CancelAfter(TimeSpan.FromSeconds(30));
+        await response.Content.LoadIntoBufferAsync(4 * 1024 * 1024, deadline.Token);
+        return JsonNode.Parse(await response.Content.ReadAsStringAsync(deadline.Token));
     }
     HttpRequestMessage Request(HttpMethod method, string route)
     {
@@ -47,27 +109,28 @@ public class Api : IDisposable
     {
         await Authenticate(ct);
         using var q = Request(HttpMethod.Get, route);
-        using var r = await http.SendAsync(q, ct); Ensure(r);
-        return JsonNode.Parse(await r.Content.ReadAsStringAsync(ct));
+        using var r = await Send(q, ct); Ensure(r);
+        return await ReadJson(r, ct);
     }
     public async Task<string> Resolve(string v, CancellationToken ct)
     {
         if (Guid.TryParse(v, out var id)) return id.ToString();
-        return (await Get("objects/identifiers?fqr=" + Uri.EscapeDataString(v), ct))?.GetValue<string>() ?? throw new Exception("Reference unresolved.");
+        var route = c.ApiVersion == "v4" ? "objectIdentifiers" : "objects/identifiers";
+        return (await Get(route + "?fqr=" + Uri.EscapeDataString(v), ct))?.GetValue<string>() ?? throw new Exception("Reference unresolved.");
     }
     public async Task Write(string id, JsonNode value, CancellationToken ct)
     {
         await Authenticate(ct);
         using var q = Request(HttpMethod.Patch, "objects/" + id);
         q.Content = JsonContent.Create(new { item = new { presentValue = value } });
-        using var r = await http.SendAsync(q, ct); Ensure(r);
+        using var r = await Send(q, ct); Ensure(r);
     }
     public async Task Command(string id, string commandId, JsonObject body, CancellationToken ct)
     {
         await Authenticate(ct);
         using var request = Request(HttpMethod.Put, $"objects/{id}/commands/{Uri.EscapeDataString(commandId)}");
         request.Content = JsonContent.Create(body);
-        using var response = await http.SendAsync(request, ct);
+        using var response = await Send(request, ct);
         Ensure(response);
     }
     public async Task Subscribe(string id, string stream, CancellationToken ct)
@@ -75,7 +138,7 @@ public class Api : IDisposable
         await Authenticate(ct);
         using var q = Request(HttpMethod.Get, $"objects/{id}/attributes/presentValue");
         q.Headers.Add("METASYS-SUBSCRIBE", stream);
-        using var r = await http.SendAsync(q, ct); Ensure(r);
+        using var r = await Send(q, ct); Ensure(r);
         if (r.Headers.TryGetValues("METASYS-SUBSCRIPTION-LOCATION", out var locations))
         {
             var location = locations.First();

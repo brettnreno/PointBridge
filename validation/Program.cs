@@ -6,7 +6,9 @@ int passed = 0;
 async Task Test(string name, Func<Task> action) { try { await action(); Console.WriteLine("PASS " + name); passed++; } catch(Exception e) { Console.WriteLine("FAIL " + name + ": " + e.Message); Environment.ExitCode = 1; } }
 const string id = "32cfddc0-411f-5b9e-9a6d-442cb62fecbb";
 const string stream = "b6d184ee-e137-44aa-b9b1-14bc704cd25d";
-foreach(var version in new[]{"v5","v6"})
+await Test("Secure versioned discovery, batch and inspection", ExplorerScenarios.Run);
+if(args.Contains("--explorer-only"))return;
+foreach(var version in new[]{"v4","v5","v6"})
 {
     var transport = new ContractTransport();
     var http = new HttpClient(transport);
@@ -22,7 +24,7 @@ foreach(var version in new[]{"v5","v6"})
         const string reference="adx:engine/Folder.Temp & Humidity";
         transport.Expect(q=>{
             Check(q.Headers.Authorization?.ToString()=="Bearer contract-token","bearer propagation");
-            Check(q.RequestUri!.AbsolutePath==$"/api/{version}/objects/identifiers","resolve route");
+            Check(q.RequestUri!.AbsolutePath==$"/api/{version}/"+(version=="v4"?"objectIdentifiers":"objects/identifiers"),"resolve route");
             Check(q.RequestUri.Query=="?fqr="+Uri.EscapeDataString(reference),"FQR query encoding");
             return Task.FromResult(Json("\""+id+"\""));
         });
@@ -75,9 +77,12 @@ foreach(var version in new[]{"v5","v6"})
     transport.Complete();
 }
 await Test("Bridge orchestration", BridgeScenario.Run);
+await Test("Mixed API v5 source to v4 destination write and readback", BridgeScenario.VersionFourDestination);
 await Test("Readback mismatch never records success", BridgeScenario.ReadbackMismatch);
 await Test("Unreliable matching destination never records success", BridgeScenario.DestinationQuality);
 await Test("Expired token renewal", FailureScenarios.TokenExpiry);
+await Test("Versioned refresh, read-only batch and failure boundaries", MetasysVersionScenarios.TokensAndBatch);
+await Test("Metasys 12 v4 destination preflight and command permissions", MetasysVersionScenarios.VersionFour);
 await Test("Unconfirmed subscription rejected", FailureScenarios.MissingSubscriptionHeader);
 await Test("Stream reconnects before token expiry", FailureScenarios.StreamTokenLifetime);
 await Test("Failed durable settings save rolls back", FailureScenarios.DurableSettingsFailure);

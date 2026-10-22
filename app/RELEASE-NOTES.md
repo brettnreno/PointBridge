@@ -1,4 +1,16 @@
-# Release 1.2.2 — production-test candidate
+# Release 1.2.3 — production-test candidate
+
+Adds Metasys 12 API v4 destination selection for the default and additional recipients. Metasys sources remain API v5/v6. API v4 reference lookup, unfiltered attribute schemas, explicit modify permissions and scalar command invocation permissions are handled separately. Prioritized points require a supported adjustment command rather than an implicit attribute write.
+
+API clients refresh expiring bearer tokens before using password authentication again, serialize concurrent renewal, reject invalid token lifetimes, and do not retry credentials on server outages or certificate failures. All versions require explicit command invocation and modify permissions. Normal certificate validation, protected saved credentials, transfer pause controls and write/readback recovery remain enabled. Certificate failures provide safe certificate trust/hostname guidance.
+
+Pause transfers before upgrading. Install over 1.2.2 or earlier supported versions without uninstalling; ProgramData configuration and recovery accounts are retained. Choose API v4 on the Metasys 12 recipient, save/test it, and revalidate mappings before starting transfers. Builds are unsigned and live customer compatibility remains uncommissioned.
+
+The mapping browser now navigates objects, network devices, equipment, spaces and mapped equipment points. It resolves the underlying point rather than the equipment instance ID, supports numbered collection pages, and reads up to 50 visible point values in one read-only batch. Individual failures, quality and priority remain visible. Returned URLs are never blindly followed.
+
+The read-only point inspector is available from a browser point or Activity. It shows current value/type/units/quality/priority, discovered commands, trends, alarms and redacted audits. It supports v4 and v5/v6 trend formats, bounded time ranges, and safe pagination. It cannot acknowledge, discard, annotate or command anything. Audit usernames, free text, parameters and old/new values are omitted. See METASYS-EXPLORER.md for operating limits. No full SDK dependency or insecure stream transport is added. No live customer requests or point writes are performed by the release tests.
+
+## Release 1.2.2 history
 
 Fixes Metasys 13 local-user authentication when private v6 userinfo returns HTTP 404. The same verified HTTPS origin and bearer session are used to request private v5 userinfo. Both responses require the same canonical profile and identity validation. Authentication failures, invalid profiles, redirects and TLS failures do not trigger fallback. No password login is retried and no certificate validation is bypassed.
 

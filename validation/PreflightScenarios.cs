@@ -6,7 +6,7 @@ public static class PreflightScenarios
     const string Id="32cfddc0-411f-5b9e-9a6d-442cb62fecbb";
     public sealed class Fixture
     {
-        public string Type="number",Units="unitEnumSet.degC";public bool Writable=true,Aggregate=false,MissingSchema=false;public double Value=20,Max=100;public int Writes;public JsonNode? LastWrite;
+        public string Type="number",Units="unitEnumSet.degC";public bool Writable=true,Aggregate=false,MissingSchema=false,DenyCommand=false,MissingCommandPermissions=false;public double Value=20,Max=100;public int Writes;public JsonNode? LastWrite;
         public JsonNode Schema=>new JsonObject{["type"]=Type,["minimum"]=0,["maximum"]=Max};
         public HttpResponseMessage Reply(HttpRequestMessage q)
         {
@@ -20,7 +20,7 @@ public static class PreflightScenarios
             var result=new JsonObject{["item"]=item,["effectivePermissions"]=new JsonObject{["canModify"]=true}};if(!MissingSchema)result["schema"]=schema;
             return Json(result.ToJsonString());
         }
-        public JsonObject Commands()=>new(){["items"]=new JsonArray(new JsonObject{
+        public JsonObject Commands()=>new(){["effectivePermissions"]=MissingCommandPermissions?null:new JsonObject{["canInvoke"]=DenyCommand?new JsonArray():new JsonArray("commandIdEnumSet.adjustCommand")},["items"]=new JsonArray(new JsonObject{
             ["id"]="commandIdEnumSet.adjustCommand",["title"]="Adjust",["aggregateCommand"]=Aggregate,
             ["commandBodySchema"]=new JsonObject{
                 ["type"]="object",["properties"]=new JsonObject{
@@ -50,6 +50,8 @@ public static class PreflightScenarios
         Check(body["priority"]!.ToString()==m.CommandPriority,"schema-approved command priority");
         await dst.Command(Id,m.CommandId,body,default);Check(destination.Writes==1 && JsonNode.DeepEquals(destination.LastWrite,body),"HTTP202 command sends actual validated payload");
         m.CommandPriority="writePriorityEnumSet.priorityManualEmergency";Check(!(await Preflight.Validate(m,src,dst,default)).Valid,"undeclared priority must fail");m.CommandPriority=null;
+        destination.DenyCommand=true;Check(!(await Preflight.Validate(m,src,dst,default)).Valid,"denied command must fail");destination.DenyCommand=false;
+        destination.MissingCommandPermissions=true;Check(!(await Preflight.Validate(m,src,dst,default)).Valid,"missing command permissions must fail closed");destination.MissingCommandPermissions=false;
         destination.Aggregate=true;Check(!(await Preflight.Validate(m,src,dst,default)).Valid,"aggregate MV/BV adjust must fail");
         var requiredPriority=command.SelectedCommand!;
         requiredPriority.CommandBodySchema!["required"]=new JsonArray("parameters","priority");

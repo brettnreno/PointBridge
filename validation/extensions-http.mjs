@@ -8,6 +8,13 @@ if(fs.existsSync(data+'/setup-code.txt')){const setupCode=fs.readFileSync(data+'
 else check((await call('/api/auth/login','POST',{username:'fixture-admin',password:'fixture-admin-password'})).status===200,'fixture admin login');
 let state=(await call('/api/state')).json;check(!state.extensionsEnabled&&Object.keys(state.externalSources).length===0,'extensions start disabled and empty');
 const recipient='3ddc1120-a657-4c49-aea7-b40ed67d3cce',sourceId='a7a80f73-343d-48dd-a8b9-9207c42d6745',object='52cfddc0-411f-5b9e-9a6d-442cb62fecbb';
+const v4Connection={baseUrl:'https://fixture-api.invalid',apiVersion:'v4',username:'fixture-api-user',password:'fixture-only-password'};
+check((await call('/api/connections/source','PUT',v4Connection)).status===400,'v4 source configuration remains unsupported');
+check((await call('/api/connections/destination','PUT',v4Connection)).status===200,'Metasys 12 v4 default recipient save');
+check((await call('/api/connections/destination/test','POST',v4Connection)).status===200,'v4 default recipient authentication test');
+check((await call('/api/connections/destination:'+recipient,'PUT',{...v4Connection,baseUrl:'https://fixture-api-two.invalid'})).status===200,'v4 additional recipient save');
+check((await call('/api/connections/destination:'+recipient+'/test','POST')).status===200,'v4 additional recipient authentication test');
+check((await call('/api/state')).json.destinations[recipient].apiVersion==='v4','v4 recipient selection persists in public state');
 check((await call('/api/connections/destination','PUT',{baseUrl:'https://fixture-api.invalid',apiVersion:'v5',username:'fixture-api-user',password:'fixture-only-password'})).status===200,'default destination save');
 check((await call('/api/connections/destination:'+recipient,'PUT',{baseUrl:'https://fixture-api-two.invalid',apiVersion:'v6',username:'fixture-api-user',password:'fixture-only-password'})).status===200,'additional destination save');
 check((await call('/api/connections/extensions','PUT',{enabled:true})).status===200,'explicit extension opt-in');

@@ -9,7 +9,7 @@ on:
         description: 'Release candidate tag matching the project version (for example v1.2.1-rc.1)'
         required: true
         type: string
-        default: v1.2.2-rc.1
+        default: v1.2.3-rc.1
 
 permissions:
   contents: write
@@ -77,6 +77,8 @@ jobs:
 
           This build is unsigned. Automated tests use fake endpoints; actual customer Metasys compatibility and point behavior still require verification. No credentials, local settings or test logs are attached.
           "@
+          $candidateNotes = ((Get-Content app/RELEASE-NOTES.md -Raw) -split '(?m)^## Release', 2)[0]
+          $notes += "`n`n$candidateNotes"
           $notesFile = Join-Path $env:RUNNER_TEMP 'pointbridge-release-notes.md'
           Set-Content -LiteralPath $notesFile -Value $notes -Encoding utf8
           gh release create $env:CANDIDATE_TAG @assets --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "Point Bridge $env:CANDIDATE_TAG" --notes-file $notesFile --prerelease --latest=false

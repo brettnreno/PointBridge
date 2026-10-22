@@ -21,6 +21,21 @@ public static class BridgeScenario
         }
         finally{await bridge.SetArmed(false);await bridge.StopAsync(default);}
     }
+    public static async Task VersionFourDestination()
+    {
+        var env=new FakeEnvironment();var store=TestStore(env,"v5-to-v4");store.Config.Destination.ApiVersion="v4";
+        using var bridge=new Bridge(store);await bridge.StartAsync(default);await bridge.SetArmed(true);
+        try
+        {
+            await Until(()=>store.Config.Mappings.Single().LastSuccess!=null,"v5 source to v4 destination verified readback",8);
+            Check(env.Writes.Count==1&&env.DestinationValues[DestinationId]==10,"mixed-version initial write confirmed once");
+            env.SourceValue=11;
+            await env.Event("object.values.update","{\"item\":{\"id\":\""+SourceId+"\",\"presentValue\":11}}");
+            await Until(()=>env.Writes.Count==2&&store.Config.Mappings.Single().Status=="Verified","mixed-version COV readback",8);
+            Check(env.DestinationValues[DestinationId]==11,"v4 destination receives current source value");
+        }
+        finally{await bridge.SetArmed(false);await bridge.StopAsync(default);}
+    }
     public static async Task DestinationQuality()
     {
         var env=new FakeEnvironment{DestinationUnreliable=true};var dir=Path.Combine(Path.GetTempPath(),"bridge-quality-"+Guid.NewGuid());Directory.CreateDirectory(dir);
@@ -106,9 +121,9 @@ public static class BridgeScenario
         var env=new FakeEnvironment();var store=TestStore(env,"first");
         store.Config.Mappings.Add(new Mapping{Id="second",Name="Second",SourceObject=SourceId,DestinationObject="62cfddc0-411f-5b9e-9a6d-442cb62fecbb"});
         store.Config.Mappings.Add(new Mapping{Id="third",Name="Third",SourceObject=SourceId,DestinationObject="72cfddc0-411f-5b9e-9a6d-442cb62fecbb"});
-        using var bridge=new Bridge(store){MaxConcurrentChecks=2,HealthCheckInterval=TimeSpan.FromMilliseconds(100),OperationDeadline=TimeSpan.FromMilliseconds(300)};await bridge.StartAsync(default);await bridge.SetArmed(true);
+        using var bridge=new Bridge(store){MaxConcurrentChecks=2,HealthCheckInterval=TimeSpan.FromMilliseconds(100),OperationDeadline=TimeSpan.FromSeconds(1)};await bridge.StartAsync(default);await bridge.SetArmed(true);
         try{
-            await Until(()=>env.Writes.Count==3&&store.Config.Mappings.All(m=>m.Status=="Verified"),"initial two mappings verified");
+            await Until(()=>env.Writes.Count==3&&store.Config.Mappings.All(m=>m.Status=="Verified"),"initial three mappings verified");
             env.SourceValue=11;env.BlockNextWrite=true;
             await env.Event("object.values.update","{\"item\":{\"id\":\""+SourceId+"\",\"presentValue\":11}}");
             await env.WriteStarted.Task.WaitAsync(TimeSpan.FromSeconds(3));

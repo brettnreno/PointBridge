@@ -53,6 +53,7 @@ public class PointInfo
     public string Type { get; set; } = "";
     public string? Units { get; set; }
     public string? Reliability { get; set; }
+    public string? Priority { get; set; }
     public JsonNode? Schema { get; set; }
     public bool Writable { get; set; }
 }

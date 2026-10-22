@@ -38,7 +38,7 @@ public static class Endpoints
         app.MapPut("/api/connections/{side}", async (string side, Connection input, Store store, Bridge bridge) =>
         {
             store.Side(side);
-            ValidateConnection(input);
+            ValidateConnection(input, side);
             await bridge.Configure(() => store.Set(side, input));
             return store.Public(side);
         });
@@ -56,7 +56,7 @@ public static class Endpoints
             Connection? input = null;
             if (request.ContentLength > 0 || request.Headers.TransferEncoding.Count > 0)
                 input = await request.ReadFromJsonAsync<Connection>(ct);
-            if (input != null) ValidateConnection(input);
+            if (input != null) ValidateConnection(input, side);
             using var client = input == null ? store.Client(side) : store.TemporaryClient(side, input);
             await client.Login(ct);
             return new { success = true, message = "Authentication successful. Validate a point mapping to check types, units, write permissions and supported commands." };
@@ -73,6 +73,29 @@ public static class Endpoints
         {
             using var client = store.Client(side);
             return new { items = await Preflight.Commands(client, @object, ct) };
+        });
+        app.MapGet("/api/metasys/{side}/browse", async (string side, string? kind, string? parentId, int? page, Store store, CancellationToken ct) =>
+        {
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            deadline.CancelAfter(TimeSpan.FromSeconds(25));
+            using var client = store.Client(side);
+            return await MetasysExplorer.Browse(client, kind ?? "objects", parentId, page ?? 1, deadline.Token);
+        });
+        app.MapPost("/api/metasys/{side}/values", async (string side, BatchReadRequest request, Store store, CancellationToken ct) =>
+        {
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            deadline.CancelAfter(TimeSpan.FromSeconds(25));
+            using var client = store.Client(side);
+            return await MetasysExplorer.ReadValues(client, request.ObjectIds ?? [], deadline.Token);
+        });
+        app.MapGet("/api/metasys/{side}/inspect", async (string side, string @object, string? view, DateTimeOffset? start,
+            DateTimeOffset? end, int? page, string? continuation, Store store, CancellationToken ct) =>
+        {
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            deadline.CancelAfter(TimeSpan.FromSeconds(25));
+            using var client = store.Client(side);
+            return await MetasysExplorer.Inspect(client, @object, view ?? "summary", start ?? DateTimeOffset.UtcNow.AddDays(-1),
+                end ?? DateTimeOffset.UtcNow, page ?? 1, continuation, deadline.Token);
         });
 
         app.MapPost("/api/mappings/validate", async (Mapping mapping, Store store, CancellationToken ct) =>
@@ -169,12 +192,13 @@ public static class Endpoints
         mapping.Status = "Validated; transfers paused";
     }
 
-    static void ValidateConnection(Connection input)
+    static void ValidateConnection(Connection input, string side)
     {
         if (!Uri.TryCreate(input.BaseUrl, UriKind.Absolute, out var uri) || uri.Scheme != "https" || uri.AbsolutePath != "/"
             || uri.UserInfo != "" || uri.Query != "" || uri.Fragment != "")
             throw new ArgumentException("Enter an HTTPS server origin, e.g. https://adx.example.com");
-        if (input.ApiVersion is not ("v5" or "v6")) throw new ArgumentException("Choose API v5 or v6.");
+        if (input.ApiVersion is not ("v5" or "v6") && !(input.ApiVersion == "v4" && side != "source"))
+            throw new ArgumentException("Choose API v5 or v6 for a source, or v4, v5 or v6 for a destination.");
         if (string.IsNullOrWhiteSpace(input.Username)) throw new ArgumentException("Enter the Metasys account username.");
     }
 }

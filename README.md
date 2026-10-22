@@ -1,10 +1,17 @@
 # Point Bridge
 
-Point Bridge is a Windows service with a local web console for copying scalar data into Metasys points. It supports Metasys REST API v5/v6 source and recipient connections, optional read-only JSON API sources, and multiple recipient servers. The repository branch is **master**.
+Point Bridge is a Windows service with a local web console for copying scalar data into Metasys points. It supports Metasys REST API v5/v6 sources and v4/v5/v6 recipients, optional read-only JSON API sources, and multiple recipient servers. Select API v4 for a Metasys 12 destination and API v5 for Metasys 13. The repository branch is **master**.
 
-Current version: **1.2.2 production-test candidate**. Builds are unsigned. Controlled local/fake-endpoint tests pass; customer installation, actual point behavior and independent Metasys notifications still need commissioning. It is not a pharmacy safety certification or a replacement for independent monitoring.
+Current version: **1.2.3 production-test candidate**. Builds are unsigned. Controlled local/fake-endpoint tests pass; customer installation, actual point behavior and independent Metasys notifications still need commissioning. It is not a pharmacy safety certification or a replacement for independent monitoring.
 
 ## Screenshots
+
+### Discovery and inspection (1.2.3)
+
+Browse object hierarchies, network devices, equipment and spaces directly in a mapping. Read up to 50 visible values in one read-only batch, with quality/priority and individual failures shown separately. Inspect a point's current metadata, trends, alarms and redacted audits without writing or acknowledging anything. See [operating limits and security](app/METASYS-EXPLORER.md).
+
+![Equipment point browser and batched values](docs/screenshots/point-explorer.png)
+![Read-only Metasys point inspector](docs/screenshots/point-inspector.png)
 
 These captures use an isolated demo with synthetic accounts, reserved `.invalid` server addresses and fake point data. Transfers remain paused; no customer configuration or credentials are shown.
 
@@ -169,7 +176,7 @@ pwsh -NoProfile -File .\scripts\Test.ps1
 
 The suites link the real staged code and use in-memory HTTP transports or loopback fake endpoints. No Metasys credentials, customer access or paid APIs are required. The script starts only its own fake server on port15089 and stops that exact process afterward. Synthetic data goes into a unique temporary directory, outside uploaded artifacts.
 
-Coverage includes backend v5/v6 contracts, preflight/priority, COV/reconnect, quiet-point checks, stalled/slow workers, partial failures, readback/quality/drift, uncertain writes and crash windows, corrupt/incomplete/disk-full journal, identity substitution/revocation/outages, JSON rate/time/size/freshness errors, migration, fan-out and export secret canaries. Passing simulations do not certify actual customer point behavior.
+Coverage includes backend v4/v5/v6 contracts, mixed v5-to-v4 delivery/readback, explicit command permissions, secure/concurrent token refresh, discovery and mapped point identifiers, batched partial failures, versioned trends, redacted activity inspection, time/page/size/CSRF boundaries, preflight/priority, COV/reconnect, quiet-point checks, stalled/slow workers, partial failures, readback/quality/drift, uncertain writes and crash windows, corrupt/incomplete/disk-full journal, identity substitution/revocation/outages, JSON rate/time/size/freshness errors, migration, fan-out and export secret canaries. Passing simulations do not certify actual customer point behavior.
 
 ## GitHub Actions
 

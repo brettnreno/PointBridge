@@ -6,13 +6,19 @@ public static class FailureScenarios
 {
     public static async Task TokenExpiry()
     {
-        var transport=new ContractTransport();using var api=new Api(new Connection{BaseUrl="https://adx.test"},"secret",new HttpClient(transport));
+        var transport=new ContractTransport();var clock=new TestClock();using var api=new Api(new Connection{BaseUrl="https://adx.test"},"secret",new HttpClient(transport),clock);
         string Token(string value,DateTimeOffset expires)=>new JsonObject{["accessToken"]=value,["expires"]=expires.ToString("O")}.ToJsonString();
-        transport.Expect(q=>Task.FromResult(Json(Token("expired",DateTimeOffset.UtcNow.AddSeconds(-1)))));
+        transport.Expect(q=>Task.FromResult(Json(Token("expired",clock.Now.AddMinutes(1)))));
         await api.Login(default);
+        clock.Now=clock.Now.AddMinutes(2);
         transport.Expect(q=>{Check(q.RequestUri!.AbsolutePath.EndsWith("/login"),"expired token must renew");return Task.FromResult(Json(Token("fresh",DateTimeOffset.UtcNow.AddHours(1))));});
         transport.Expect(q=>{Check(q.Headers.Authorization?.Parameter=="fresh","renewed bearer must replace expired token");return Task.FromResult(Json("{}"));});
         await api.Get("objects",default);transport.Complete();
+    }
+    public sealed class TestClock : TimeProvider
+    {
+        public DateTimeOffset Now=DateTimeOffset.UtcNow;
+        public override DateTimeOffset GetUtcNow()=>Now;
     }
     public static async Task MissingSubscriptionHeader()
     {

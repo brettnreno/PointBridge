@@ -12,6 +12,7 @@ $publishArguments=@('publish',$project,'-c','Release','-r','win-x64','--self-con
 if($NoRestore){$publishArguments+='--no-restore'}
 & dotnet @publishArguments 2>&1|Tee-Object -FilePath (Join-Path $logs 'publish.txt');if($LASTEXITCODE -ne 0){throw 'Publish failed.'}
 foreach($file in @('OpenConsole.url','Configure-Https.ps1','Reset-Accounts.ps1','Install-Service.ps1','Uninstall-PointBridge.ps1','README.md','API-NOTES.md','RELEASE-NOTES.md','METASYS-LOGIN.md','ON-SITE-ACCEPTANCE.md','metasys-login.disabled.example.json','EXTERNAL-SOURCES.md','RECOVERY-AND-DIAGNOSTICS.md','WATCHDOG-OFFLINE.md','health-frame.schema.json','health-publishing.disabled.example.json','weather-source.disabled.example.json','INSTALL-AND-REMOVE.md')){Copy-Item -LiteralPath (Join-Path (Join-Path $root 'app') $file) -Destination $runtime}
+Copy-Item -LiteralPath (Join-Path $root 'app\METASYS-EXPLORER.md') -Destination $runtime
 $msi=Join-Path $packages ('MetasysPointBridge-'+$version+'-production-test-x64.msi')
 & (Join-Path $root 'app\Build-Msi.ps1') -PublishDirectory $runtime -OutputPath $msi -Version $version|ConvertTo-Json -Depth 4|Set-Content -LiteralPath (Join-Path $logs 'msi.json')
 Copy-Item -LiteralPath (Join-Path $root 'app\Uninstall-PointBridge.ps1'),(Join-Path $root 'app\INSTALL-AND-REMOVE.md') -Destination $packages
