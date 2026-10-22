@@ -139,10 +139,54 @@ foreach(var deniedStatus in new[]{"Disabled","Locked","expired"})
  var statusProvider=new MetasysSessions(new FakeClient{Status=parsed.Statuses},statusOptions,new FakeClock());
  Assert(await statusProvider.OpenAsync(new("fixture-user","fixture-only-password"),default) is null,"scalar explicit denied status rejected "+deniedStatus);
 }
+foreach (var mode in new[] { "v6", "v5", "denied", "invalid-profile" })
+{
+    var transport = new IdentityRouteFixtureHandler(mode);
+    using var routeClient = new MetasysUiClient(new HttpClient(transport));
+    UiIdentity? routeIdentity = null;
+    try { routeIdentity = await routeClient.IdentityAsync("https://metasys-fixture.invalid", "fixture-only-token", default); }
+    catch (MetasysContractException) { }
+    Assert(transport.Paths[0] == "/API/private-api/v6/userinfo", "profile route starts with v6: " + mode);
+    Assert(transport.Paths.Count == (mode == "v5" ? 2 : 1), "v5 fallback occurs only for missing v6 route: " + mode);
+    Assert((routeIdentity is not null) == (mode is "v6" or "v5"), "profile route preserves validation: " + mode);
+    if (mode == "v5") Assert(transport.Paths[1] == "/API/private-api/v5/userinfo", "missing v6 route uses same-origin v5 userinfo");
+}
+var legacyTransport = new IdentityRouteFixtureHandler("v5");
+using (var legacyClient = new MetasysUiClient(new HttpClient(legacyTransport)))
+{
+    var legacyOptions = new MutableOptions();
+    legacyOptions.Value.Enabled = true;
+    legacyOptions.Value.AllowAnyAuthenticatedUser = true;
+    using var legacySessions = new MetasysSessions(legacyClient, legacyOptions, new FakeClock());
+    var legacyPrincipal = await legacySessions.OpenAsync(new("fixture-user", "fixture-only-password"), default);
+    Assert(legacyPrincipal is not null && legacyPrincipal.IsInRole("Admin"), "v5-only profile authenticates a validated Metasys user");
+    Assert(await legacySessions.ValidateAsync(legacyPrincipal!, default), "v5-only profile preserves identity validation during refresh");
+    await legacySessions.CloseAsync(legacyPrincipal!);
+    Assert(legacyTransport.Paths.Count(path => path.EndsWith("/LogIn")) == 1, "v5 fallback never retries the password login");
+    Assert(legacyTransport.Paths.Count(path => path == "/API/private-api/v5/userinfo") == 2, "v5 profile used for login and refreshed session");
+    Assert(legacyTransport.Paths.Count(path => path.EndsWith("/LogOut")) == 1 && legacySessions.Count == 0, "v5 session logout removes access");
+}
 Console.WriteLine($"{passed} adapter assertions passed; fake transports only, no live authentication.");
 } catch(Exception error) { Console.Error.WriteLine(error.Message.StartsWith("Fixture failed:") ? error.Message : "FAIL authentication fixture: "+error.GetType().Name); Environment.ExitCode=1; }
 
 public record DataLocation(string Path);
+sealed class IdentityRouteFixtureHandler(string mode) : HttpMessageHandler
+{
+    public List<string> Paths { get; } = [];
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        var path = request.RequestUri!.AbsolutePath;
+        Paths.Add(path);
+        if (path.EndsWith("/LogIn") || path.EndsWith("/RefreshToken") || path.EndsWith("/LogOut"))
+        {
+            var authenticationBody = path.EndsWith("/LogOut") ? "{\"IsAuthenticated\":false}" : "{\"IsAuthenticated\":true,\"IsTermsAndConditionsAccepted\":true,\"UserStorageId\":6,\"access_token\":\"fixture-only-token\"}";
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(authenticationBody, Encoding.UTF8, "application/json") });
+        }
+        var status = mode == "denied" ? HttpStatusCode.Unauthorized : mode == "v5" && path == "/API/private-api/v6/userinfo" ? HttpStatusCode.NotFound : HttpStatusCode.OK;
+        var body = mode == "invalid-profile" ? "{}" : "{\"profile\":{\"userName\":\"fixture-user\",\"id\":\"fixture-id\",\"authenticationType\":\"metasys\"}}";
+        return Task.FromResult(new HttpResponseMessage(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") });
+    }
+}
 sealed class MutableOptions : IOptionsMonitor<MetasysLoginOptions>
 {
     public MetasysLoginOptions Value = new() { ServerOrigin = "https://metasys-fixture.invalid" };

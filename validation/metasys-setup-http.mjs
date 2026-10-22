@@ -47,6 +47,12 @@ check((await request(second, '/api/auth/metasys/login', 'POST', {username: 'fixt
 await request(recovery, '/api/fixture/mode/substitute', 'POST', {});
 check((await request(second, '/api/auth/metasys/login', 'POST', {username: 'fixture-second-user', password: bootstrap.password})).status === 401, 'any-user mode rejects identity substitution');
 await request(recovery, '/api/fixture/mode/normal', 'POST', {});
+for (const [mode, code] of [['tls', 'metasys-tls-failed'], ['substitute', 'metasys-identity-rejected']]) {
+    await request(recovery, '/api/fixture/mode/' + mode, 'POST', {});
+    const result = await request(recovery, settings + '/users', 'POST', {serverOrigin: 'https://fixture.invalid', username: 'fixture-user', password: bootstrap.password});
+    check(result.status === 400 && result.body.error.includes(code), 'verification reports safe diagnostic for ' + mode);
+}
+await request(recovery, '/api/fixture/mode/normal', 'POST', {});
 check((await request(recovery, settings, 'PUT', {serverOrigin: 'https://localhost', enabled: true})).status === 400, 'changed server cannot enable using previous server verification');
 check((await request(recovery, settings, 'PUT', {serverOrigin: 'https://localhost', enabled: false})).status === 200, 'server change saves disabled');
 check((await request(recovery, settings)).body.users.length === 0, 'server change clears previous server identities');

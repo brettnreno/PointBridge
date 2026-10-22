@@ -66,13 +66,16 @@ public sealed class MetasysLoginSettings : IOptionsMonitor<MetasysLoginOptions>
         if (username.Length is < 1 or > 256 || username.Any(char.IsControl) || string.IsNullOrEmpty(request.Password) || request.Password.Length > 256)
             throw new ArgumentException("Enter the Metasys username and password to verify this user.");
         string? token = null;
+        var stage = "login";
         try
         {
             var login = await client.LoginAsync(origin, username, request.Password, cancellationToken);
             token = login.Token;
-            if (!login.Authenticated || string.IsNullOrWhiteSpace(token)) throw new InvalidOperationException();
+            if (!login.Authenticated || string.IsNullOrWhiteSpace(token)) throw new ArgumentException("Metasys did not accept the login. Diagnostic: metasys-login-rejected. No user was approved.");
             if (!login.TermsAccepted) throw new ArgumentException("Accept the terms in Metasys first, then verify this user again.");
+            stage = "identity";
             var identity = await client.IdentityAsync(origin, token, cancellationToken);
+            stage = "identity-validation";
             MetasysSessions.Check(login, identity, username);
             lock (gate)
             {
@@ -84,7 +87,17 @@ public sealed class MetasysLoginSettings : IOptionsMonitor<MetasysLoginOptions>
             }
         }
         catch (ArgumentException) { throw; }
-        catch { throw new ArgumentException("Metasys user verification failed. Check the credentials, account status, HTTPS certificate trust and server availability. No user was approved."); }
+        catch (Exception exception)
+        {
+            var code = "metasys-" + stage + "-unavailable";
+            if (exception is MetasysContractException contract && System.Text.RegularExpressions.Regex.IsMatch(contract.Code, "^(http-[1-5][0-9]{2}|profile-missing-or-invalid|account-status-shape|account-status-unknown|identity-fields-missing)$"))
+                code = "metasys-" + stage + "-" + contract.Code;
+            else if (exception is JsonException) code = "metasys-" + stage + "-json-invalid";
+            else if (stage == "identity-validation") code = "metasys-identity-rejected";
+            for (Exception? inner = exception; inner is not null; inner = inner.InnerException)
+                if (inner is System.Security.Authentication.AuthenticationException) { code = "metasys-tls-failed"; break; }
+            throw new ArgumentException("Metasys user verification failed. Diagnostic: " + code + ". Check credentials, account status, HTTPS trust and server compatibility. No user was approved.");
+        }
         finally { if (!string.IsNullOrEmpty(token)) { try { await client.LogoutAsync(origin, token); } catch { } } }
     }
 

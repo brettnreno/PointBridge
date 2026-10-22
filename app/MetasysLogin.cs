@@ -82,9 +82,18 @@ public sealed class MetasysUiClient : IMetasysUiClient, IDisposable
     }
     public async Task<UiIdentity> IdentityAsync(string serverOrigin, string token, CancellationToken ct)
     {
-        using var request = Request(serverOrigin, "/API/private-api/v6/userinfo", token);
-        using var body = await SendAsync(request, ct);
-        return ParseIdentity(body.RootElement);
+        try
+        {
+            using var request = Request(serverOrigin, "/API/private-api/v6/userinfo", token);
+            using var body = await SendAsync(request, ct);
+            return ParseIdentity(body.RootElement);
+        }
+        catch (MetasysContractException exception) when (exception.Code == "http-404")
+        {
+            using var request = Request(serverOrigin, "/API/private-api/v5/userinfo", token);
+            using var body = await SendAsync(request, ct);
+            return ParseIdentity(body.RootElement);
+        }
     }
     internal static UiIdentity ParseIdentity(JsonElement root)
     {

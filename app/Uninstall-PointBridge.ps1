@@ -28,7 +28,7 @@ if($RemoveData){Assert-SafeTree $dataRoot (Join-Path $env:ProgramData 'MetasysPo
 $installedExe=Join-Path $installRoot 'apiTool.exe'
 if(Test-Path -LiteralPath $installedExe){
     $installedVersion=((Get-Item -LiteralPath $installedExe).VersionInfo.ProductVersion -split '[-+]')[0]
-    if($installedVersion -notin @('1.2.1','1.2.0','1.1.1','1.1.0','1.0.0')){throw 'A different application version occupies the target directory. Use that release uninstall helper; nothing was changed.'}
+    if($installedVersion -notin @('1.2.2','1.2.1','1.2.0','1.1.1','1.1.0','1.0.0')){throw 'A different application version occupies the target directory. Use that release uninstall helper; nothing was changed.'}
 }
 $service=Get-Service -Name $serviceName -ErrorAction SilentlyContinue
 if($service){
@@ -39,7 +39,7 @@ if($service){
     Stop-Service -Name $serviceName -ErrorAction Stop
     (Get-Service -Name $serviceName).WaitForStatus('Stopped',[TimeSpan]::FromSeconds(60))
 }
-foreach($version in @('1.2.1','1.2.0','1.1.1','1.1.0','1.0.0')){
+foreach($version in @('1.2.2','1.2.1','1.2.0','1.1.1','1.1.0','1.0.0')){
     $code=Product-Code $version
     $key='Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\'+$code
     if(Test-Path -LiteralPath $key){

@@ -1,4 +1,12 @@
-# Release 1.2.1 — production-test candidate
+# Release 1.2.2 — production-test candidate
+
+Fixes Metasys 13 local-user authentication when private v6 userinfo returns HTTP 404. The same verified HTTPS origin and bearer session are used to request private v5 userinfo. Both responses require the same canonical profile and identity validation. Authentication failures, invalid profiles, redirects and TLS failures do not trigger fallback. No password login is retried and no certificate validation is bypassed.
+
+The customer-run diagnostic confirmed a valid Metasys 13 profile at the v5 route with a matching canonical username and profile ID. An absent optional account status remains unknown; it is not asserted to be Active. Regression coverage exercises v6/v5 selection, rejected profiles, authentication failure, v5 login/session refresh/logout, and one password login per attempt. Verification errors now expose safe stage-specific diagnostic codes without credentials or raw responses.
+
+The MSI version is incremented to upgrade existing 1.2.1 installations while retaining ProgramData. Pause transfers before upgrading. Existing local recovery accounts remain available.
+
+## Release 1.2.1 history
 
 First-run setup verifies a Metasys login against the local server and enables all valid Metasys users with Administrator access. No separate local account, user enrollment, manual identity IDs, JSON editing or service restart is required. Existing local-account installations use User accounts → Configure Metasys sign-in. Passwords and vendor tokens are not saved with settings. Server changes require fresh verification; local recovery remains available.
 

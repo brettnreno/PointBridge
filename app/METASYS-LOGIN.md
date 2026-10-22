@@ -1,4 +1,6 @@
-# Metasys sign-in — 1.2.1 production-test candidate
+# Metasys sign-in — 1.2.2 production-test candidate
+
+Profile validation first requests private v6 userinfo. Only HTTP 404 triggers a private v5 userinfo request on the same verified HTTPS server, supporting the profile contract confirmed by the Metasys 13 diagnostic. Invalid profiles, rejected credentials and certificate errors fail closed. The same validation applies during session refresh; login credentials are never retried to select a profile version.
 
 Point Bridge is installed on the Metasys server. The installer requires the local MIIIDM core service. Older Metasys UI versions do not need the newer UI Assets registry entry. First-run setup verifies your Metasys login against the local UI, then enables sign-in for all valid Metasys users. Each receives Point Bridge Administrator access. Disabled, locked, expired and substituted identities are rejected. A failed Metasys login never silently falls back to local authentication. Passing installation detection does not establish authentication compatibility with an older Metasys version.
 

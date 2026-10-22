@@ -2,7 +2,60 @@
 
 Point Bridge is a Windows service with a local web console for copying scalar data into Metasys points. It supports Metasys REST API v5/v6 source and recipient connections, optional read-only JSON API sources, and multiple recipient servers. The repository branch is **master**.
 
-Current version: **1.2.1 production-test candidate**. Builds are unsigned. Controlled local/fake-endpoint tests pass; customer installation, actual point behavior and independent Metasys notifications still need commissioning. It is not a pharmacy safety certification or a replacement for independent monitoring.
+Current version: **1.2.2 production-test candidate**. Builds are unsigned. Controlled local/fake-endpoint tests pass; customer installation, actual point behavior and independent Metasys notifications still need commissioning. It is not a pharmacy safety certification or a replacement for independent monitoring.
+
+## Screenshots
+
+These captures use an isolated demo with synthetic accounts, reserved `.invalid` server addresses and fake point data. Transfers remain paused; no customer configuration or credentials are shown.
+
+**Point mappings** — review source and destination servers, manage mappings, and start or pause transfers.
+
+![Point mappings dashboard with three synthetic temperature mappings and transfers paused](docs/screenshots/mappings.png)
+
+<details>
+<summary>Connections and API credentials</summary>
+
+Configure source and destination servers independently, select API versions, and test connections. Saved passwords are not displayed.
+
+![Source and destination connection settings using demo accounts and reserved server addresses](docs/screenshots/connections.png)
+
+</details>
+
+<details>
+<summary>Mapping configuration and point validation</summary>
+
+Check current values, data types, units and destination writability before enabling transfers. The example results come from fake endpoints.
+
+![Mapping editor showing read-only point validation results for a synthetic temperature mapping](docs/screenshots/mapping-validation.png)
+
+</details>
+
+<details>
+<summary>First-run Metasys setup</summary>
+
+Configure and verify Metasys sign-in through the app without editing JSON.
+
+![First-run setup form with empty installation-code, Metasys server and sign-in fields](docs/screenshots/setup.png)
+
+</details>
+
+<details>
+<summary>User accounts and recovery access</summary>
+
+Configure Metasys sign-in and manage local recovery accounts. All authenticated users have Administrator access.
+
+![Account management with a synthetic local recovery account](docs/screenshots/accounts.png)
+
+</details>
+
+<details>
+<summary>Service activity</summary>
+
+Review service events. This paused demo shows the view before any transfer events have been recorded.
+
+![Service activity view before transfer events have been recorded](docs/screenshots/activity.png)
+
+</details>
 
 ## What it does
 
