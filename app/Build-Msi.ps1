@@ -7,7 +7,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 # Builds an MSI database using Windows Installer's native authoring API.
-# No installer is executed and no custom actions or downloaded build tools are used.
+# No installer is executed and no downloaded build tools are used.
 # References: learn.microsoft.com/windows/win32/msi/{serviceinstall-table,
 # msilockpermissionsex-table,msiserviceconfigfailureactions-table,cabinet-files}.
 if (-not [Environment]::Is64BitOperatingSystem) { throw 'Build on 64-bit Windows.' }
@@ -59,6 +59,7 @@ try {
     $directories = [Collections.Generic.List[object]]::new()
     $directories.Add(@('TARGETDIR',$null,'SourceDir'))
     $directories.Add(@('ProgramFiles64Folder','TARGETDIR','.'))
+    $directories.Add(@('System64Folder','TARGETDIR','.'))
     $directories.Add(@('INSTALLDIR','ProgramFiles64Folder','MPBRDG|Metasys Point Bridge'))
     $directories.Add(@('CommonAppDataFolder','TARGETDIR','.'))
     $directories.Add(@('DATADIR','CommonAppDataFolder','MPDATA|MetasysPointBridge'))
@@ -122,7 +123,7 @@ try {
     Import-Table 'MsiLockPermissionsEx' @('MsiLockPermissionsEx','LockObject','Table','SDDLText','Condition') @('s72','s72','s32','l0','S255') @('MsiLockPermissionsEx') @(,@('DataAcl','DATADIR','CreateFolder','D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FA;;;LS)','NOT REMOVE'))
     Import-Table 'ServiceInstall' @('ServiceInstall','Name','DisplayName','ServiceType','StartType','ErrorControl','LoadOrderGroup','Dependencies','StartName','Password','Arguments','Component_','Description') @('s72','l255','L255','i4','i4','i4','S255','S255','S255','S255','S255','s72','L255') @('ServiceInstall') @(,@('BridgeService','MetasysPointBridge','Metasys Point Bridge',16,2,32769,$null,$null,'NT AUTHORITY\LocalService',$null,$null,$serviceComponent,'Mirrors configured Metasys point values using change-of-value notifications.'))
     Import-Table 'ServiceControl' @('ServiceControl','Name','Event','Arguments','Wait','Component_') @('s72','l255','i2','L255','I2','s72') @('ServiceControl') @(,@('BridgeServiceControl','MetasysPointBridge',163,$null,1,$serviceComponent))
-    Import-Table 'MsiServiceConfigFailureActions' @('MsiServiceConfigFailureActions','Name','Event','ResetPeriod','RebootMessage','Command','Actions','DelayActions','Component_') @('s72','l255','i2','I4','L255','L255','S255','S255','s72') @('MsiServiceConfigFailureActions') @(,@('BridgeRecovery','MetasysPointBridge',5,86400,$null,$null,'1[~]1[~]1','5000[~]15000[~]60000',$serviceComponent))
+    Import-Table 'CustomAction' @('Action','Type','Source','Target') @('s72','i2','S72','S255') @('Action') @(,@('ConfigureBridgeRecovery',3106,'System64Folder','"[System64Folder]sc.exe" failure MetasysPointBridge reset= 86400 actions= restart/5000/restart/15000/restart/60000'))
     Import-Table 'Registry' @('Registry','Root','Key','Name','Value','Component_') @('s72','i2','l255','L255','L0','s72') @('Registry') @(
         @('EventMessageFile',2,'SYSTEM\CurrentControlSet\Services\EventLog\Application\MetasysPointBridge','EventMessageFile','[INSTALLDIR]System.Diagnostics.EventLog.Messages.dll',$serviceComponent),
         @('EventTypes',2,'SYSTEM\CurrentControlSet\Services\EventLog\Application\MetasysPointBridge','TypesSupported','#7',$serviceComponent)
@@ -135,12 +136,15 @@ try {
     # VersionNT is 603 on modern Windows for MSI compatibility; use the real build registry value.
     Import-Table 'RegLocator' @('Signature_','Root','Key','Name','Type') @('s72','i2','s255','S255','I2') @('Signature_') @(,@('WindowsBuild',2,'SOFTWARE\Microsoft\Windows NT\CurrentVersion','CurrentBuildNumber',18))
     Import-Table 'AppSearch' @('Property','Signature_') @('s72','s72') @('Property','Signature_') @(,@('WINBUILD','WindowsBuild'))
+    Import-Table 'Signature' @('Signature','FileName','MinVersion','MaxVersion','MinSize','MaxSize','MinDate','MaxDate','Languages') @('s72','s255','S20','S20','I4','I4','I4','I4','S255') @('Signature') @()
     Import-Table 'LaunchCondition' @('Condition','Description') @('s255','l255') @('Condition') @(
         @('Installed OR (VersionNT64 AND WINBUILD >= 14393 AND MsiNTProductType > 1)','Requires 64-bit Windows Server 2016 or later (build 14393 or newer).'),
         @('Installed OR NOT NEWERPRODUCTFOUND','A newer version of Metasys Point Bridge is already installed.'),
         @('Installed OR Privileged','Administrator privileges are required to install Point Bridge.')
     )
     $actions=@(@('FindRelatedProducts',$null,25),@('AppSearch',$null,50),@('LaunchConditions',$null,100),@('CostInitialize',$null,800),@('FileCost',$null,900),@('CostFinalize',$null,1000),@('MigrateFeatureStates',$null,1200),@('InstallValidate',$null,1400),@('InstallInitialize',$null,1500),@('RemoveExistingProducts','OLDPRODUCTS',1510),@('ProcessComponents',$null,1600),@('UnpublishFeatures',$null,1800),@('StopServices','VersionNT',1900),@('DeleteServices','VersionNT',2000),@('RemoveRegistryValues',$null,2600),@('RemoveShortcuts',$null,3200),@('RemoveFiles',$null,3500),@('RemoveFolders',$null,3600),@('CreateFolders',$null,3700),@('InstallFiles',$null,4000),@('CreateShortcuts',$null,4500),@('WriteRegistryValues',$null,5000),@('InstallServices','VersionNT',5800),@('MsiConfigureServices','VersionNT',5850),@('StartServices','VersionNT',5900),@('RegisterUser',$null,6000),@('RegisterProduct',$null,6100),@('PublishFeatures',$null,6300),@('PublishProduct',$null,6400),@('InstallFinalize',$null,6600))
+    $actions=@($actions | Where-Object {$_[0] -ne 'MsiConfigureServices'})
+    $actions+=,@('ConfigureBridgeRecovery',('$'+$serviceComponent+'=3'),5850)
     Import-Table 'InstallExecuteSequence' @('Action','Condition','Sequence') @('s72','S255','I2') @('Action') $actions
     Import-Table 'InstallUISequence' @('Action','Condition','Sequence') @('s72','S255','I2') @('Action') @(@('FindRelatedProducts',$null,25),@('AppSearch',$null,50),@('LaunchConditions',$null,100),@('CostInitialize',$null,800),@('FileCost',$null,900),@('CostFinalize',$null,1000),@('ExecuteAction',$null,1300))
     $summary=$database.SummaryInformation(20)
@@ -168,7 +172,12 @@ try {
     if($cabRows.Count -ne 1){throw 'Embedded cabinet stream is missing.'}
     $manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath ($output+'.manifest.json') -Encoding utf8
     [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($database);$database=$null
-    [pscustomobject]@{Msi=$output;Version=$Version;Files=$sequence;Bytes=(Get-Item -LiteralPath $output).Length;SHA256=(Get-FileHash -LiteralPath $output -Algorithm SHA256).Hash;UpgradeCode=$upgradeCode;CabinetHashesVerified=$true;Signed=$false;InstallerExecuted=$false;AuthoringScratch=$scratch}
+    $session=$installer.OpenPackage($output,1)
+    try {
+        if($session.DoAction('AppSearch') -ne 1){throw 'Windows Installer AppSearch validation failed.'}
+        if($session.Property('WINBUILD') -ne [string](Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion').CurrentBuildNumber){throw 'Windows Installer Windows build detection failed.'}
+    } finally {[void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($session)}
+    [pscustomobject]@{Msi=$output;Version=$Version;Files=$sequence;Bytes=(Get-Item -LiteralPath $output).Length;SHA256=(Get-FileHash -LiteralPath $output -Algorithm SHA256).Hash;UpgradeCode=$upgradeCode;CabinetHashesVerified=$true;AppSearchVerified=$true;Signed=$false;InstallerExecuted=$false;AuthoringScratch=$scratch}
 }
 finally {
     if($database){[void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($database)}
