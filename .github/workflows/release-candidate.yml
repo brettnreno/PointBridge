@@ -1,0 +1,94 @@
+name: Publish release candidate
+
+on:
+  push:
+    tags: ['v*-rc.*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release candidate tag matching the project version (for example v1.2.1-rc.1)'
+        required: true
+        type: string
+        default: v1.2.1-rc.1
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-candidate-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      CANDIDATE_TAG: ${{ inputs.tag || github.ref_name }}
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      DOTNET_GENERATE_ASPNET_CERTIFICATE: 'false'
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Validate release candidate version
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $project = [xml](Get-Content app/apiTool.csproj -Raw)
+          $version = [string]($project.Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1)
+          if ($env:CANDIDATE_TAG -notmatch ('^v' + [regex]::Escape($version) + '-rc\.[1-9][0-9]*$')) {
+            throw "Candidate tag must match the project version: v$version-rc.N"
+          }
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - name: Test and build the Windows installer
+        run: ./scripts/Build.ps1
+      - name: Publish installer and bundle on GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $referenceJson = gh api "repos/$env:GITHUB_REPOSITORY/git/ref/tags/$env:CANDIDATE_TAG" 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            $reference = ($referenceJson | ConvertFrom-Json).object
+            while ($reference.type -eq 'tag') {
+              $tagJson = gh api "repos/$env:GITHUB_REPOSITORY/git/tags/$($reference.sha)"
+              if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve candidate tag.' }
+              $reference = ($tagJson | ConvertFrom-Json).object
+            }
+            if ($reference.type -ne 'commit' -or $reference.sha -ne $env:GITHUB_SHA) {
+              throw 'Candidate tag points to a different commit than the build. Choose a new candidate tag.'
+            }
+          }
+          $assets = @(Get-ChildItem artifacts/packages -File | ForEach-Object { $_.FullName })
+          if (!($assets | Where-Object { $_.EndsWith('.msi') }) -or !($assets | Where-Object { $_.EndsWith('.zip') })) {
+            throw 'Installer or bundle missing; release will not be published.'
+          }
+          $notes = @"
+          Windows x64 release candidate built from commit $env:GITHUB_SHA.
+
+          Download the bundle ZIP under Assets for the installer, SHA256 checksums and installation/removal instructions. The MSI is also available separately.
+
+          Requires a Windows Metasys server with local core services and Metasys UI installed. Complete Metasys sign-in setup locally after installation. Pause transfers before upgrading an existing installation.
+
+          This build is unsigned. Automated tests use fake endpoints; actual customer Metasys compatibility and point behavior still require verification. No credentials, local settings or test logs are attached.
+          "@
+          $notesFile = Join-Path $env:RUNNER_TEMP 'pointbridge-release-notes.md'
+          Set-Content -LiteralPath $notesFile -Value $notes -Encoding utf8
+          gh release create $env:CANDIDATE_TAG @assets --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "Point Bridge $env:CANDIDATE_TAG" --notes-file $notesFile --prerelease --latest=false
+          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed. Existing releases are never overwritten.' }
+          $releaseUrl = gh release view $env:CANDIDATE_TAG --repo $env:GITHUB_REPOSITORY --json url --jq .url
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot verify published release.' }
+          "## Release candidate`n`n[Download installer and bundle]($releaseUrl)" | Add-Content $env:GITHUB_STEP_SUMMARY
+      - name: Retain build and synthetic-test logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: PointBridge-release-logs-${{ github.run_number }}
+          path: artifacts/logs/*
+          if-no-files-found: warn
+          retention-days: 14

@@ -120,6 +120,14 @@ Coverage includes backend v5/v6 contracts, preflight/priority, COV/reconnect, qu
 
 ## GitHub Actions
 
+### Download a release candidate
+
+Installers are published on the [GitHub Releases page](https://github.com/brettnreno/PointBridge/releases). Open a release marked Pre-release and download the bundle ZIP under Assets; it includes the MSI, SHA256 checksums and installation/removal instructions. Builds are unsigned. Pause transfers before upgrading an existing installation.
+
+Maintainers publish a candidate by running Actions → Publish release candidate → Run workflow on master with a tag such as `v1.2.1-rc.1`, or by pushing that tag. The version must match app/apiTool.csproj. Every candidate runs the full tests and builds a fresh Windows package before publication. Existing candidate releases are never overwritten; use the next rc number for a new build. The workflow uses GitHub's built-in token and requires no personal token or repository secrets.
+
+### Continuous integration
+
 [.github/workflows/build.yml](.github/workflows/build.yml) runs on pushes to master, pull requests targeting master and manual dispatch. A Windows runner installs .NET10, tests, publishes and authors the MSI. Artifacts are retained30 days; build/synthetic-test logs14 days. Workflow permissions are read-only and no repository secrets are required. It does not deploy, install, activate transfers, connect to customer servers, publish GitHub Releases or use SSH keys.
 
 After a successful run, open Actions -> Build and test Point Bridge -> the run -> Artifacts. Download the Windows package and inspect checksums/instructions. Hosted Actions execution must be verified after the workflow is pushed; local validation alone does not mean GitHub has run it.
