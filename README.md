@@ -80,7 +80,7 @@ The optional Install-Service.ps1 is an alternative for manually deployed runtime
 
 ## Metasys sign-in
 
-See [app/METASYS-LOGIN.md](app/METASYS-LOGIN.md). First-run setup and User accounts configure the local Metasys server in the app, verify a login, and enable all valid Metasys users with Administrator access. No JSON editing or restart is required. The installer requires local Metasys core services and Metasys UI registration. Server addresses configured in the app must resolve to this computer.
+See [app/METASYS-LOGIN.md](app/METASYS-LOGIN.md). First-run setup and User accounts configure the local Metasys server in the app, verify a login, and enable all valid Metasys users with Administrator access. No JSON editing or restart is required. The installer requires the local Metasys core service; it does not require the newer UI Assets registry entry. Setup verifies actual UI authentication separately. Server addresses configured in the app must resolve to this computer.
 
 The authentication adapter uses the private Metasys UI JSON contract observed on a Metasys16 lab server. It is not represented as a supported public vendor login API. Different versions and account-state policies require target-side verification. Passwords are not saved by this provider; tokens stay in bounded server-side sessions and never enter browser cookies or logs. A provider failure does not silently fall back to local password checking.
 

@@ -2,7 +2,7 @@
 
 First-run setup verifies a Metasys login against the local server and enables all valid Metasys users with Administrator access. No separate local account, user enrollment, manual identity IDs, JSON editing or service restart is required. Existing local-account installations use User accounts → Configure Metasys sign-in. Passwords and vendor tokens are not saved with settings. Server changes require fresh verification; local recovery remains available.
 
-The MSI requires local Metasys core and UI registration, includes the Signature table needed by AppSearch, and configures recovery with a checked elevated deferred sc.exe action instead of the failing native MsiConfigureServices action. Version 1.2.1 upgrades 1.2.0 while preserving ProgramData.
+The MSI requires the local Metasys MIIIDM core service, includes the Signature table needed by AppSearch, and configures recovery with a checked elevated deferred sc.exe action instead of the failing native MsiConfigureServices action. RC2 accepts older Metasys installations without the newer UI Assets registry entry; UI authentication is verified separately during setup. Build checks cover core service present without UI registration, missing Metasys core services, and maintenance after Metasys removal. Version 1.2.1 upgrades 1.2.0 while preserving ProgramData.
 
 The setup HTTP suite covers initial installation-code/CSRF protection, rejected credentials and remote origins, first-user setup, a second user without enrollment, disabled/substituted identities, persistence, immediate revocation, recovery login, and no point writes. Target Metasys versions and actual field operation still require commissioning.
 

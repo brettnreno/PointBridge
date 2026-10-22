@@ -9,7 +9,7 @@ on:
         description: 'Release candidate tag matching the project version (for example v1.2.1-rc.1)'
         required: true
         type: string
-        default: v1.2.1-rc.1
+        default: v1.2.1-rc.2
 
 permissions:
   contents: write

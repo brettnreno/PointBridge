@@ -1,6 +1,6 @@
 # Metasys sign-in — 1.2.1 production-test candidate
 
-Point Bridge is installed on the Metasys server. The installer requires the local MIIIDM core service and Metasys UI registration. First-run setup verifies your Metasys login, then enables sign-in for all valid Metasys users. Each receives Point Bridge Administrator access. Disabled, locked, expired and substituted identities are rejected. A failed Metasys login never silently falls back to local authentication.
+Point Bridge is installed on the Metasys server. The installer requires the local MIIIDM core service. Older Metasys UI versions do not need the newer UI Assets registry entry. First-run setup verifies your Metasys login against the local UI, then enables sign-in for all valid Metasys users. Each receives Point Bridge Administrator access. Disabled, locked, expired and substituted identities are rejected. A failed Metasys login never silently falls back to local authentication. Passing installation detection does not establish authentication compatibility with an older Metasys version.
 
 On a fresh installation, open http://127.0.0.1:5088/ on that server. Enter the code from C:\ProgramData\MetasysPointBridge\setup-code.txt, the trusted HTTPS address of Metasys on this computer, and your Metasys username/password. Select Verify Metasys and complete setup, then sign in. No separate local account or JSON editing is required. Source/destination API credentials remain separate.
 

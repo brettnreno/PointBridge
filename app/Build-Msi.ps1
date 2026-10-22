@@ -136,14 +136,12 @@ try {
     # VersionNT is 603 on modern Windows for MSI compatibility; use the real build registry value.
     Import-Table 'RegLocator' @('Signature_','Root','Key','Name','Type') @('s72','i2','s255','S255','I2') @('Signature_') @(
         @('WindowsBuild',2,'SOFTWARE\Microsoft\Windows NT\CurrentVersion','CurrentBuildNumber',18),
-        @('MetasysCoreService',2,'SYSTEM\CurrentControlSet\Services\MIIIDM','ImagePath',18),
-        @('MetasysUiServer',2,'SOFTWARE\Johnson Controls\Metasys UI Assets','InstallPath',18),
-        @('MetasysUiServer32',2,'SOFTWARE\Johnson Controls\Metasys UI Assets','InstallPath',2)
+        @('MetasysCoreService',2,'SYSTEM\CurrentControlSet\Services\MIIIDM','ImagePath',18)
     )
-    Import-Table 'AppSearch' @('Property','Signature_') @('s72','s72') @('Property','Signature_') @(@('WINBUILD','WindowsBuild'),@('METASYSCORE','MetasysCoreService'),@('METASYSUI','MetasysUiServer'),@('METASYSUI32','MetasysUiServer32'))
+    Import-Table 'AppSearch' @('Property','Signature_') @('s72','s72') @('Property','Signature_') @(@('WINBUILD','WindowsBuild'),@('METASYSCORE','MetasysCoreService'))
     Import-Table 'Signature' @('Signature','FileName','MinVersion','MaxVersion','MinSize','MaxSize','MinDate','MaxDate','Languages') @('s72','s255','S20','S20','I4','I4','I4','I4','S255') @('Signature') @()
     Import-Table 'LaunchCondition' @('Condition','Description') @('s255','l255') @('Condition') @(
-        @('Installed OR (METASYSCORE AND (METASYSUI OR METASYSUI32))','Install Point Bridge on a Metasys server with Metasys core services and Metasys UI installed.'),
+        @('Installed OR METASYSCORE','Point Bridge requires a local Metasys server with the Metasys core service (MIIIDM) installed. Installation was stopped.'),
         @('Installed OR (VersionNT64 AND WINBUILD >= 14393 AND MsiNTProductType > 1)','Requires 64-bit Windows Server 2016 or later (build 14393 or newer).'),
         @('Installed OR NOT NEWERPRODUCTFOUND','A newer version of Metasys Point Bridge is already installed.'),
         @('Installed OR Privileged','Administrator privileges are required to install Point Bridge.')
@@ -177,11 +175,23 @@ try {
     $cabRows=@(Query-Rows 'SELECT `Name` FROM `_Streams` WHERE `Name` = ''payload.cab''')
     if($cabRows.Count -ne 1){throw 'Embedded cabinet stream is missing.'}
     $manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath ($output+'.manifest.json') -Encoding utf8
+    $metasysConditions=@(Query-Rows 'SELECT `Condition`, `Description` FROM `LaunchCondition`' | Where-Object {$_[0] -match 'METASYSCORE'})
+    if($metasysConditions.Count -ne 1){throw 'Expected one local Metasys prerequisite condition.'}
+    $metasysCondition=$metasysConditions[0][0]
     [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($database);$database=$null
     $session=$installer.OpenPackage($output,1)
     try {
         if($session.DoAction('AppSearch') -ne 1){throw 'Windows Installer AppSearch validation failed.'}
         if($session.Property('WINBUILD') -ne [string](Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion').CurrentBuildNumber){throw 'Windows Installer Windows build detection failed.'}
+        $session.Property('Installed')=''
+        $session.Property('METASYSUI')=''
+        $session.Property('METASYSUI32')=''
+        $session.Property('METASYSCORE')='fixture-local-core-service'
+        if($session.EvaluateCondition($metasysCondition) -ne 1){throw 'Metasys core service without newer UI registration must be accepted.'}
+        $session.Property('METASYSCORE')=''
+        if($session.EvaluateCondition($metasysCondition) -ne 0){throw 'A computer without Metasys core services must be rejected.'}
+        $session.Property('Installed')='1'
+        if($session.EvaluateCondition($metasysCondition) -ne 1){throw 'Installed product maintenance must remain available without Metasys.'}
     } finally {[void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($session)}
     [pscustomobject]@{Msi=$output;Version=$Version;Files=$sequence;Bytes=(Get-Item -LiteralPath $output).Length;SHA256=(Get-FileHash -LiteralPath $output -Algorithm SHA256).Hash;UpgradeCode=$upgradeCode;CabinetHashesVerified=$true;AppSearchVerified=$true;Signed=$false;InstallerExecuted=$false;AuthoringScratch=$scratch}
 }
