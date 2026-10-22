@@ -140,15 +140,19 @@ public static class Preflight
         var commands = new List<CommandInfo>();
         foreach (var raw in items)
         {
+            var identifier = raw?["id"]?.ToString() ?? "";
+            var isAdjust = identifier.Split('.').Last() == "adjustCommand";
+            var canInvoke = response is JsonObject && response["effectivePermissions"]?["canInvoke"] is JsonArray permissions
+                && permissions.Any(permission => permission?.ToString() == identifier);
+            var inspectSchema = isAdjust && raw?["aggregateCommand"]?.ToString() != "true" && canInvoke;
             var command = new CommandInfo
             {
-                Id = raw?["id"]?.ToString() ?? "",
+                Id = identifier,
                 Title = raw?["title"]?.ToString() ?? raw?["name"]?.ToString() ?? raw?["id"]?.ToString() ?? "",
-                CommandBodySchema = await Expand(api, raw?["commandBodySchema"], raw?["commandBodySchema"]?["definitions"], ct)
+                CommandBodySchema = inspectSchema ? await Expand(api, raw?["commandBodySchema"], raw?["commandBodySchema"]?["definitions"], ct) : null
             };
             var parameters = command.CommandBodySchema?["properties"]?["parameters"];
             var tuple = parameters?["items"] as JsonArray;
-            var isAdjust = command.Id.Split('.').Last() == "adjustCommand";
             command.Supported = isAdjust && raw?["aggregateCommand"]?.ToString() != "true"
                 && tuple?.Count == 1 && SchemaRules.Type(tuple[0]) is "number" or "integer" or "boolean" or "string"
                 && (parameters?["maxItems"]?.GetValue<int>() ?? 1) == 1;
@@ -224,7 +228,11 @@ public static class Preflight
             if (target != null) return await Expand(api, target, definitions, ct, depth + 1);
         }
         var copy = new JsonObject();
-        foreach (var pair in obj) copy[pair.Key] = await Expand(api, pair.Value, definitions, ct, depth + 1);
+        foreach (var pair in obj)
+        {
+            if (pair.Key is "definitions" or "$defs") continue;
+            copy[pair.Key] = await Expand(api, pair.Value, definitions, ct, depth + 1);
+        }
         return copy;
     }
 }

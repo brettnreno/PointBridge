@@ -44,6 +44,8 @@ Accounts require API Access Type. Point operations require Monitoring and Comman
 
 ## Implementation decisions
 
+Schema expansion follows references used by the active value/command schema, rather than recursively fetching every entry in `definitions`/`$defs`. Command discovery expands only permitted, nonaggregate scalar-adjust candidates; unsupported or denied commands cannot force unrelated enum requests. This avoids an unused `attributeEnumSet` definition or release-command schema blocking a numeric adjustment. Enums actually referenced by the supported adjustment's parameters or priority remain required: failed lookups still block validation and retain request-specific errors. No permission or value-domain check is bypassed.
+
 Request failures identify the configured connection (`source`, `destination`, or the additional recipient identifier), HTTP status, method and request path. Query values, account names, credentials, bearer tokens and raw server responses are not included. Start/check errors and per-mapping worker HTTP errors retain this context. Scrubbed diagnostic exports continue to omit raw error messages and paths.
 
 Saved connections share an in-memory bearer session and HTTP transport across mapping validation, runtime workers and browsing. Each operation acquires a reference-counted client lease with separate stream subscription bookkeeping. Closing a lease does not close another operation's connection. Refresh is serialized across leases; the token/expiry pair is replaced atomically. API v4 reported expirations longer than an hour are capped at 55 minutes before renewal, following JCI's documented lifetime caveat.

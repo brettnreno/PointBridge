@@ -1,4 +1,14 @@
-# Release 1.2.4 — production-test candidate
+# Release 1.2.5 — production-test candidate
+
+Fixes preflight unnecessarily fetching unused enum definitions and schemas for unsupported or permission-denied commands. A numeric adjustment could otherwise fail with destination HTTP 403 on `/api/v4/schemas/enums/attributeEnumSet`, even when that enum was not needed by the selected adjustment. Schema expansion now follows active references without eagerly expanding definition catalogs. Only permitted, nonaggregate adjust-command candidates have their command schemas expanded.
+
+Required parameter and priority enums remain mandatory: if a supported command actually references an enum and Metasys refuses it, validation still fails with the request-specific error. This is not a certificate, licensing or permissions bypass. Existing session reuse, value-domain checks, write safeguards and readback verification are retained.
+
+Regression tests reproduce the exact unused `attributeEnumSet` HTTP 403 before the fix and cover v4/v5/v6, unsupported release commands, valid numeric adjustment payloads, required priority refusal and required parameter-enum refusal. Full automated tests use fake endpoints only; actual customer behavior remains subject to commissioning.
+
+Pause transfers and install over 1.2.4 without uninstalling. Configuration, mappings and accounts remain in ProgramData. Ports are unchanged. Recheck affected mappings before restarting transfers. The installer remains unsigned.
+
+## Release 1.2.4 history
 
 HTTP errors now identify source/destination (or additional recipient), status, method and exact request path. Query values, credentials, tokens and raw server responses are omitted. Mapping validation, runtime write/readback failures and COV stream failures retain request context rather than only suggesting licensing/permissions. This exposes the refused operation; it does not claim to establish the cause of a customer's 403.
 
