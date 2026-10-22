@@ -99,9 +99,10 @@ public class Bridge(Store store) : BackgroundService
                 await Run(linked.Token);
             }
             catch (OperationCanceledException) when (linked.IsCancellationRequested) { }
-            catch (Exception)
+            catch (Exception exception)
             {
-                Status = "Disconnected - retrying in 10 seconds"; Log("error", "stage=stream-or-preflight; code=connection-failed; retrySeconds=10");
+                Status = exception is MetasysRequestException ? "Disconnected: " + exception.Message + " Retrying in 10 seconds." : "Disconnected - retrying in 10 seconds";
+                Log("error", "stage=stream-or-preflight; code=connection-failed; retrySeconds=10");
                 foreach (var mapping in store.Config.Mappings.Where(x => x.Enabled)) mapping.Status = "Disconnected — value may be stale";
                 try { await Task.Delay(10000, linked.Token); } catch (OperationCanceledException) { }
             }
@@ -141,7 +142,6 @@ public class Bridge(Store store) : BackgroundService
         }
         async Task Worker((Mapping m, string source, string destination, ValidationResult validation) x)
         {
-            // Per-mapping API instances isolate authentication and pending requests.
             using var source = x.m.SourceKind=="metasys"?store.Client("source"):null;
             using var destination = store.Client(Store.DestinationSide(x.m));
             var binding=RecoveryJournal.Binding(store,x.m,x.source,x.destination);
@@ -264,7 +264,7 @@ public class Bridge(Store store) : BackgroundService
                     {
                         var category = e is OperationCanceledException ? "deadline" : e is InvalidDataException ? "invalid-data" : "request-failed";
                         var code = e is JournalException journalError ? journalError.Code : e is ExternalSourceException external ? external.Code : stage + "-" + category;
-                        x.m.Status = code;
+                        x.m.Status = e is MetasysRequestException ? stage + ": " + e.Message : code;
                         state = state with { State = "Unhealthy", FailureCode = code, ConsecutiveFailures = state.ConsecutiveFailures + 1,
                             SourceQuality = code=="source-quality"?"reported-unreliable":code=="source-quality-missing"?"unreported":state.SourceQuality,
                             DeadlineFailures = state.DeadlineFailures + (e is OperationCanceledException ? 1 : 0),
@@ -339,7 +339,7 @@ public class Bridge(Store store) : BackgroundService
                     },token);
                 }
                 catch(OperationCanceledException)when(token.IsCancellationRequested){return;}
-                catch(Exception){Status="Disconnected COV - retrying in 10 seconds; periodic checks continue";Log("warning","stage=cov; code=stream-disconnected; retrySeconds=10");await Task.Delay(10000,token);}
+                catch(Exception exception){Status=exception is MetasysRequestException?"Disconnected COV: "+exception.Message+" Retrying in 10 seconds; periodic checks continue.":"Disconnected COV - retrying in 10 seconds; periodic checks continue";Log("warning","stage=cov; code=stream-disconnected; retrySeconds=10");await Task.Delay(10000,token);}
             }
         }
         try

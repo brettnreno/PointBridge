@@ -1,4 +1,16 @@
-# Release 1.2.3 — production-test candidate
+# Release 1.2.4 — production-test candidate
+
+HTTP errors now identify source/destination (or additional recipient), status, method and exact request path. Query values, credentials, tokens and raw server responses are omitted. Mapping validation, runtime write/readback failures and COV stream failures retain request context rather than only suggesting licensing/permissions. This exposes the refused operation; it does not claim to establish the cause of a customer's 403.
+
+Saved connections reuse one in-memory bearer session and HTTP transport across mappings, preflight, runtime workers and discovery. Refresh is serialized and token/expiry updates are atomic. Configuration changes retire the prior client without disrupting other active leases; credential clearing and application shutdown release cached clients. Saved connection tests still contact Metasys using refresh instead of repeatedly creating password sessions. Explicit new-credential tests remain isolated. API v4 token lifetimes are capped at 55 minutes before refresh to honor JCI's documented expiry caveat.
+
+The public v4/v5/v6 APIs do not document a logout/revocation operation. Local client disposal is not represented as server logout; the private human UI logout API is not used for REST bearer sessions. No denied operation or uncertain write is blindly replayed. TLS certificate checks remain enabled and tokens are not persisted.
+
+Pause transfers and install over 1.2.3 without uninstalling. ProgramData configuration, mappings and accounts are retained; local management remains on port 5088 and configured HTTPS ports are unchanged. Recheck affected mappings before restarting transfers. Builds remain unsigned, and customer installation/actual Metasys behavior require commissioning.
+
+Regression coverage includes repeated checks and Start with two mappings using only one login per configured connection, saved-test refresh, credential/version retirement, active lease lifetime, source versus destination 403 context, COV stream context, secret redaction and API v4 refresh timing. No live customer API requests or writes are used by these tests.
+
+## Release 1.2.3 history
 
 Adds Metasys 12 API v4 destination selection for the default and additional recipients. Metasys sources remain API v5/v6. API v4 reference lookup, unfiltered attribute schemas, explicit modify permissions and scalar command invocation permissions are handled separately. Prioritized points require a supported adjustment command rather than an implicit attribute write.
 

@@ -19,6 +19,8 @@ public static class Preflight
 
     public static async Task<ValidationResult> Validate(Mapping mapping, Api source, Api destination, CancellationToken ct)
     {
+        if (source.ConnectionName == "Metasys connection") source.ConnectionName = "source";
+        if (destination.ConnectionName == "Metasys connection") destination.ConnectionName = "destination";
         try
         {
             CheckInput(mapping);
@@ -30,6 +32,7 @@ public static class Preflight
     }
     public static async Task<ValidationResult> ValidatePoint(Mapping mapping,PointInfo source,Api destination,CancellationToken ct)
     {
+        if (destination.ConnectionName == "Metasys connection") destination.ConnectionName = "destination";
         var result=new ValidationResult();
         try
         {

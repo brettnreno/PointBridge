@@ -1,4 +1,7 @@
 using System.Text.Json.Nodes;
+public sealed class MetasysRequestException(string connection, HttpRequestMessage request, System.Net.HttpStatusCode status)
+    : HttpRequestException($"{connection}: Metasys HTTP {(int)status} on {request.Method} {request.RequestUri!.AbsolutePath}. "
+        + "The server refused this request; check its API permissions, licensing and request limits. Query values and credentials are omitted.", null, status);
 public class Api : IDisposable
 {
     readonly HttpClient http;
@@ -7,9 +10,19 @@ public class Api : IDisposable
     readonly TimeProvider clock;
     public string Origin => c.BaseUrl.TrimEnd('/');
     public string ApiVersion => c.ApiVersion;
-    string? token;
-    DateTimeOffset expires = DateTimeOffset.MinValue;
-    readonly SemaphoreSlim authGate = new(1);
+    sealed record Access(string Token, DateTimeOffset Expires);
+    sealed class Authentication
+    {
+        public Access? Current;
+        public readonly SemaphoreSlim Gate = new(1);
+        public int References = 1;
+    }
+    readonly Authentication authentication;
+    string? token => Volatile.Read(ref authentication.Current)?.Token;
+    DateTimeOffset expires => Volatile.Read(ref authentication.Current)?.Expires ?? DateTimeOffset.MinValue;
+    SemaphoreSlim authGate => authentication.Gate;
+    int disposed;
+    public string ConnectionName { get; set; } = "Metasys connection";
     public HashSet<string> SubscriptionIds { get; } = [];
     readonly List<string> subscriptionLocations = [];
     public int CleanupFailures { get; private set; }
@@ -18,49 +31,68 @@ public class Api : IDisposable
     public Api(Connection c, string p, HttpClient client, TimeProvider? clock = null)
     {
         this.c = c; password = p; http = client; this.clock = clock ?? TimeProvider.System;
+        authentication = new();
         http.BaseAddress = new Uri(c.BaseUrl.TrimEnd('/') + "/api/" + c.ApiVersion + "/");
     }
-    static void Ensure(HttpResponseMessage r)
+    Api(Api owner, string connection)
     {
-        if (!r.IsSuccessStatusCode) throw new HttpRequestException($"Metasys HTTP {(int)r.StatusCode}; check API licensing and permissions.", null, r.StatusCode);
+        c = owner.c; password = owner.password; http = owner.http; clock = owner.clock;
+        authentication = owner.authentication; ConnectionName = connection;
+        Interlocked.Increment(ref authentication.References);
     }
-    public async Task Login(CancellationToken ct)
+    public Api Share(string connection)
     {
-        await authGate.WaitAsync(ct);
-        try
+        lock (authentication)
         {
-            await LoginCore(ct);
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref disposed) != 0, this);
+            return new Api(this, connection);
         }
+    }
+    void Ensure(HttpResponseMessage response, HttpRequestMessage request)
+    {
+        if (!response.IsSuccessStatusCode) throw new MetasysRequestException(ConnectionName, request, response.StatusCode);
+    }
+    public Task Login(CancellationToken ct) => Authenticate(ct);
+    public async Task TestConnection(CancellationToken ct)
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref disposed) != 0, this);
+        await authGate.WaitAsync(ct);
+        try { await Renew(ct); }
         finally { authGate.Release(); }
     }
     async Task Authenticate(CancellationToken ct)
     {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref disposed) != 0, this);
         if (token != null && clock.GetUtcNow() < expires.AddSeconds(-30)) return;
         await authGate.WaitAsync(ct);
         try
         {
             if (token != null && clock.GetUtcNow() < expires.AddSeconds(-30)) return;
-            if (token != null && clock.GetUtcNow() < expires)
-            {
-                using var request = Request(HttpMethod.Get, "refreshToken");
-                using var response = await Send(request, ct);
-                if (response.StatusCode != System.Net.HttpStatusCode.Unauthorized)
-                {
-                    Ensure(response);
-                    await AcceptToken(response, ct);
-                    return;
-                }
-            }
-            token = null;
-            await LoginCore(ct);
+            await Renew(ct);
         }
         finally { authGate.Release(); }
+    }
+    async Task Renew(CancellationToken ct)
+    {
+        if (token != null && clock.GetUtcNow() < expires)
+        {
+            using var request = Request(HttpMethod.Get, "refreshToken");
+            using var response = await Send(request, ct);
+            if (response.StatusCode != System.Net.HttpStatusCode.Unauthorized)
+            {
+                Ensure(response, request);
+                await AcceptToken(response, ct);
+                return;
+            }
+        }
+        Volatile.Write(ref authentication.Current, null);
+        await LoginCore(ct);
     }
     async Task LoginCore(CancellationToken ct)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, "login") { Content = JsonContent.Create(new { username = c.Username, password }) };
         using var response = await Send(request, ct);
-        Ensure(response);
+        Ensure(response, request);
         await AcceptToken(response, ct);
     }
     async Task AcceptToken(HttpResponseMessage response, CancellationToken ct)
@@ -69,8 +101,8 @@ public class Api : IDisposable
         var next = body?["accessToken"]?.GetValue<string>();
         if (string.IsNullOrWhiteSpace(next) || !DateTimeOffset.TryParse(body?["expires"]?.ToString(), out var end)
             || end <= clock.GetUtcNow()) throw new IOException("Metasys returned an invalid or expired access token.");
-        token = next;
-        expires = end;
+        var lifetime = c.ApiVersion == "v4" && end > clock.GetUtcNow().AddMinutes(55) ? clock.GetUtcNow().AddMinutes(55) : end;
+        Volatile.Write(ref authentication.Current, new Access(next, lifetime));
     }
     public async Task<JsonNode?> ReadBatch(IEnumerable<string> objectIds, CancellationToken ct)
     {
@@ -83,7 +115,7 @@ public class Api : IDisposable
         using var request = Request(HttpMethod.Post, "objects/batch");
         request.Content = JsonContent.Create(new JsonObject { ["method"] = "GET", ["requests"] = requests });
         using var response = await Send(request, ct);
-        Ensure(response);
+        Ensure(response, request);
         return await ReadJson(response, ct);
     }
     async Task<HttpResponseMessage> Send(HttpRequestMessage request, CancellationToken ct)
@@ -91,7 +123,7 @@ public class Api : IDisposable
         try { return await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct); }
         catch (HttpRequestException exception) when (exception.InnerException is System.Security.Authentication.AuthenticationException)
         {
-            throw new IOException("Metasys HTTPS certificate validation failed. Use the hostname on the certificate, verify its validity, and install the issuing CA in this machine's trusted certificate store. Certificate checks remain enabled.");
+            throw new IOException($"{ConnectionName}: HTTPS certificate validation failed on {request.Method} {request.RequestUri!.AbsolutePath}. Use the hostname on the certificate, verify its validity, and install the issuing CA in this machine's trusted certificate store. Certificate checks remain enabled.");
         }
     }
     static async Task<JsonNode?> ReadJson(HttpResponseMessage response, CancellationToken ct)
@@ -109,7 +141,7 @@ public class Api : IDisposable
     {
         await Authenticate(ct);
         using var q = Request(HttpMethod.Get, route);
-        using var r = await Send(q, ct); Ensure(r);
+        using var r = await Send(q, ct); Ensure(r, q);
         return await ReadJson(r, ct);
     }
     public async Task<string> Resolve(string v, CancellationToken ct)
@@ -123,7 +155,7 @@ public class Api : IDisposable
         await Authenticate(ct);
         using var q = Request(HttpMethod.Patch, "objects/" + id);
         q.Content = JsonContent.Create(new { item = new { presentValue = value } });
-        using var r = await Send(q, ct); Ensure(r);
+        using var r = await Send(q, ct); Ensure(r, q);
     }
     public async Task Command(string id, string commandId, JsonObject body, CancellationToken ct)
     {
@@ -131,14 +163,14 @@ public class Api : IDisposable
         using var request = Request(HttpMethod.Put, $"objects/{id}/commands/{Uri.EscapeDataString(commandId)}");
         request.Content = JsonContent.Create(body);
         using var response = await Send(request, ct);
-        Ensure(response);
+        Ensure(response, request);
     }
     public async Task Subscribe(string id, string stream, CancellationToken ct)
     {
         await Authenticate(ct);
         using var q = Request(HttpMethod.Get, $"objects/{id}/attributes/presentValue");
         q.Headers.Add("METASYS-SUBSCRIBE", stream);
-        using var r = await Send(q, ct); Ensure(r);
+        using var r = await Send(q, ct); Ensure(r, q);
         if (r.Headers.TryGetValues("METASYS-SUBSCRIPTION-LOCATION", out var locations))
         {
             var location = locations.First();
@@ -163,7 +195,7 @@ public class Api : IDisposable
         SubscriptionIds.Clear();
         subscriptionLocations.Clear();
         using var q = Request(HttpMethod.Get, "stream"); q.Headers.Accept.Add(new("text/event-stream"));
-        using var r = await http.SendAsync(q, HttpCompletionOption.ResponseHeadersRead, streamToken); Ensure(r);
+        using var r = await http.SendAsync(q, HttpCompletionOption.ResponseHeadersRead, streamToken); Ensure(r, q);
         using var reader = new StreamReader(await r.Content.ReadAsStreamAsync(streamToken));
         string evt = ""; List<string> data = [];
         var opened = DateTimeOffset.UtcNow; bool helloReceived = false;
@@ -214,5 +246,17 @@ public class Api : IDisposable
         subscriptionLocations.Clear();
         SubscriptionIds.Clear();
     }
-    public void Dispose() => http.Dispose();
+    public void Dispose()
+    {
+        lock (authentication)
+        {
+            if (Interlocked.Exchange(ref disposed, 1) != 0) return;
+            if (Interlocked.Decrement(ref authentication.References) == 0)
+            {
+                Volatile.Write(ref authentication.Current, null);
+                http.Dispose();
+                authentication.Gate.Dispose();
+            }
+        }
+    }
 }

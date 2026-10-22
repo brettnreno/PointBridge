@@ -2,8 +2,11 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
 
-public class Store
+public class Store : IDisposable
 {
+    readonly object clientsGate = new();
+    readonly Dictionary<string, (Connection Settings, Api Client)> clients = new();
+    bool disposed;
     readonly IDataProtector protector;
     readonly string file;
     readonly SemaphoreSlim gate = new(1);
@@ -79,10 +82,49 @@ public class Store
 
     public virtual Api Client(string side)
     {
-        var connection = Get(side);
-        if (connection.Password.Length == 0 || connection.BaseUrl.Length == 0)
-            throw new InvalidOperationException($"Configure {side} credentials first.");
-        return new(connection, Unprotect(connection.Password));
+        lock (clientsGate)
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+            var connection = Get(side);
+            if (connection.Password.Length == 0 || connection.BaseUrl.Length == 0)
+                throw new InvalidOperationException($"Configure {side} credentials first.");
+            if (clients.TryGetValue(side, out var existing) && !SameConnection(existing.Settings, connection))
+            {
+                clients.Remove(side); existing.Client.Dispose();
+            }
+            if (!clients.TryGetValue(side, out existing))
+            {
+                var snapshot = new Connection { BaseUrl = connection.BaseUrl, ApiVersion = connection.ApiVersion,
+                    Username = connection.Username, Password = connection.Password };
+                existing = (snapshot, CreateClient(snapshot, Unprotect(snapshot.Password)));
+                clients.Add(side, existing);
+            }
+            return existing.Client.Share(side);
+        }
+    }
+    protected virtual Api CreateClient(Connection connection, string password) => new(connection, password);
+    static bool SameConnection(Connection first, Connection second) => SameAccount(first, second)
+        && first.ApiVersion == second.ApiVersion && first.Password == second.Password;
+    void RetireChangedClients()
+    {
+        lock (clientsGate)
+            foreach (var entry in clients.ToArray())
+            {
+                Connection? current = entry.Key.StartsWith("destination:") ? Config.Destinations.GetValueOrDefault(entry.Key[12..])
+                    : entry.Key == "source" ? Config.Source : Config.Destination;
+                if (current != null && SameConnection(entry.Value.Settings, current)) continue;
+                clients.Remove(entry.Key); entry.Value.Client.Dispose();
+            }
+    }
+    public void Dispose()
+    {
+        lock (clientsGate)
+        {
+            if (disposed) return;
+            disposed = true;
+            foreach (var entry in clients.Values) entry.Client.Dispose();
+            clients.Clear();
+        }
     }
     public static string DestinationSide(Mapping mapping) => mapping.DestinationConnectionId == "destination" ? "destination" : "destination:" + mapping.DestinationConnectionId;
     public void CheckFeatures(Mapping mapping)
@@ -144,11 +186,17 @@ public class Store
 
     public virtual Api TemporaryClient(string side, Connection input)
     {
+        Side(side);
+        var saved = Get(side);
+        if (input.Password.Length == 0 && SameAccount(saved, input) && saved.ApiVersion == input.ApiVersion)
+            return Client(side);
         if (input.Password.Length == 0 && !SameAccount(Get(side), input))
             throw new ArgumentException("Enter a password when testing a different server or account username.");
         var password = input.Password.Length > 0 ? input.Password : Unprotect(Get(side).Password);
         if (password.Length == 0) throw new InvalidOperationException("Enter a password first.");
-        return new(input, password);
+        var client = CreateClient(input, password);
+        client.ConnectionName = side;
+        return client;
     }
 
     static bool SameAccount(Connection first, Connection second) =>
@@ -174,6 +222,7 @@ public class Store
             change(next);
             await Write(next);
             Volatile.Write(ref config, next);
+            RetireChangedClients();
         }
         finally { gate.Release(); }
     }

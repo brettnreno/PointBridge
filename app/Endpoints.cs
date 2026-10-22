@@ -58,7 +58,7 @@ public static class Endpoints
                 input = await request.ReadFromJsonAsync<Connection>(ct);
             if (input != null) ValidateConnection(input, side);
             using var client = input == null ? store.Client(side) : store.TemporaryClient(side, input);
-            await client.Login(ct);
+            await client.TestConnection(ct);
             return new { success = true, message = "Authentication successful. Validate a point mapping to check types, units, write permissions and supported commands." };
         });
 

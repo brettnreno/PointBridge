@@ -2,7 +2,7 @@
 
 Point Bridge is a Windows service with a local web console for copying scalar data into Metasys points. It supports Metasys REST API v5/v6 sources and v4/v5/v6 recipients, optional read-only JSON API sources, and multiple recipient servers. Select API v4 for a Metasys 12 destination and API v5 for Metasys 13. The repository branch is **master**.
 
-Current version: **1.2.3 production-test candidate**. Builds are unsigned. Controlled local/fake-endpoint tests pass; customer installation, actual point behavior and independent Metasys notifications still need commissioning. It is not a pharmacy safety certification or a replacement for independent monitoring.
+Current version: **1.2.4 production-test candidate**. Builds are unsigned. Controlled local/fake-endpoint tests pass; customer installation, actual point behavior and independent Metasys notifications still need commissioning. It is not a pharmacy safety certification or a replacement for independent monitoring.
 
 ## Screenshots
 

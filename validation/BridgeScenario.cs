@@ -21,6 +21,18 @@ public static class BridgeScenario
         }
         finally{await bridge.SetArmed(false);await bridge.StopAsync(default);}
     }
+    public static async Task StreamRequestDiagnostic()
+    {
+        var env=new FakeEnvironment{StreamForbidden=true};var store=TestStore(env,"stream403");
+        using var bridge=new Bridge(store);await bridge.StartAsync(default);await bridge.SetArmed(true);
+        try
+        {
+            await Until(()=>bridge.Status.Contains("403"),"stream refusal identifies its HTTP request",8);
+            Check(bridge.Status.Contains("source:")&&bridge.Status.Contains("GET /api/v5/stream"),"COV failure names source and actual stream operation");
+            Check(env.Writes.Count==0,"refused initial stream does not authorize unconfirmed writes");
+        }
+        finally{await bridge.SetArmed(false);await bridge.StopAsync(default);}
+    }
     public static async Task VersionFourDestination()
     {
         var env=new FakeEnvironment();var store=TestStore(env,"v5-to-v4");store.Config.Destination.ApiVersion="v4";
@@ -243,11 +255,11 @@ public static class BridgeScenario
     {
         readonly FakeEnvironment env;
         public FakeStore(string dir,FakeEnvironment e):base(new EphemeralDataProtectionProvider(),new DataLocation(dir)){env=e;Config.Source.BaseUrl="https://source.test";Config.Destination.BaseUrl="https://destination.test";}
-        public override Api Client(string side)=>new(Get(side),"test",new HttpClient(new Handler(env,side)));
+        public override Api Client(string side)=>new(Get(side),"test",new HttpClient(new Handler(env,side))){ConnectionName=side};
     }
     sealed class FakeEnvironment
     {
-        public readonly PushStream Stream=new();public readonly System.Collections.Concurrent.ConcurrentQueue<double> Writes=new();public double SourceValue=10;public bool BlockNextWrite;public int SourceReads,StreamConnections,ActiveRequests,MaxActiveRequests;public double? ReadbackOverride;public bool DestinationUnreliable,SourceUnreliable,SourceFailure,CancelBlockedWrite;public string? DestinationFailId;public readonly System.Collections.Concurrent.ConcurrentDictionary<string,double> DestinationValues=new();
+        public readonly PushStream Stream=new();public readonly System.Collections.Concurrent.ConcurrentQueue<double> Writes=new();public double SourceValue=10;public bool BlockNextWrite;public int SourceReads,StreamConnections,ActiveRequests,MaxActiveRequests;public double? ReadbackOverride;public bool DestinationUnreliable,SourceUnreliable,SourceFailure,CancelBlockedWrite,StreamForbidden;public string? DestinationFailId;public readonly System.Collections.Concurrent.ConcurrentDictionary<string,double> DestinationValues=new();
         public TaskCompletionSource WriteStarted=new(TaskCreationOptions.RunContinuationsAsynchronously),ReleaseWrite=new(TaskCreationOptions.RunContinuationsAsynchronously);
         public ValueTask Event(string kind,string data)=>Stream.Push($"event: {kind}\ndata: {data}\n\n");
     }
@@ -263,7 +275,7 @@ public static class BridgeScenario
         {
             var route=q.RequestUri!.AbsolutePath;
             if(route.EndsWith("/login"))return Json(new JsonObject{["accessToken"]="test",["expires"]=DateTimeOffset.UtcNow.AddHours(1).ToString("O")}.ToJsonString());
-            if(route.EndsWith("/stream")){env.StreamConnections++;await env.Event("hello","b6d184ee-e137-44aa-b9b1-14bc704cd25d");return new(HttpStatusCode.OK){Content=new StreamContent(env.Stream)};}
+            if(route.EndsWith("/stream")){env.StreamConnections++;if(env.StreamForbidden)return new(HttpStatusCode.Forbidden);await env.Event("hello","b6d184ee-e137-44aa-b9b1-14bc704cd25d");return new(HttpStatusCode.OK){Content=new StreamContent(env.Stream)};}
             if(q.Headers.Contains("METASYS-SUBSCRIBE")){var r=new HttpResponseMessage(HttpStatusCode.Accepted);r.Headers.Add("METASYS-SUBSCRIPTION-LOCATION","https://source.test/api/v5/objects/streams/b6d184ee-e137-44aa-b9b1-14bc704cd25d/subscriptions/c9fcb046-4199-4f1c-a3e8-7841be1a3c30");return r;}
             if(q.Method==HttpMethod.Patch){if(env.DestinationFailId!=null&&route.EndsWith("/"+env.DestinationFailId))return new(HttpStatusCode.ServiceUnavailable);var b=JsonNode.Parse(await q.Content!.ReadAsStringAsync(ct));if(env.BlockNextWrite){env.BlockNextWrite=false;env.WriteStarted.TrySetResult();if(env.CancelBlockedWrite)await env.ReleaseWrite.Task.WaitAsync(ct);else await env.ReleaseWrite.Task;}var written=b!["item"]!["presentValue"]!.GetValue<double>();env.DestinationValues[route.Split('/' )[4]]=written;env.Writes.Enqueue(written);return Json("{}");}
             if(route.EndsWith("/attributes/presentValue")){if(side=="source"){env.SourceReads++;if(env.SourceFailure)return new(HttpStatusCode.ServiceUnavailable){ReasonPhrase="fixture-secret-not-real"};}var value=side=="source"?env.SourceValue:env.ReadbackOverride??env.DestinationValues.GetValueOrDefault(route.Split('/' )[4]);var data=JsonNode.Parse("{\"item\":{\"presentValue\":"+value.ToString(System.Globalization.CultureInfo.InvariantCulture)+"},\"schema\":{\"properties\":{\"presentValue\":{\"type\":\"number\",\"minimum\":0,\"maximum\":100}}}}")!;if((side=="destination"&&env.DestinationUnreliable)||(side=="source"&&env.SourceUnreliable))data["condition"]=JsonNode.Parse("{\"presentValue\":{\"reliability\":\"reliabilityEnumSet.unreliableHigh\"}}");return Json(data.ToJsonString());}

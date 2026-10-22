@@ -44,4 +44,12 @@ Accounts require API Access Type. Point operations require Monitoring and Comman
 
 ## Implementation decisions
 
+Request failures identify the configured connection (`source`, `destination`, or the additional recipient identifier), HTTP status, method and request path. Query values, account names, credentials, bearer tokens and raw server responses are not included. Start/check errors and per-mapping worker HTTP errors retain this context. Scrubbed diagnostic exports continue to omit raw error messages and paths.
+
+Saved connections share an in-memory bearer session and HTTP transport across mapping validation, runtime workers and browsing. Each operation acquires a reference-counted client lease with separate stream subscription bookkeeping. Closing a lease does not close another operation's connection. Refresh is serialized across leases; the token/expiry pair is replaced atomically. API v4 reported expirations longer than an hour are capped at 55 minutes before renewal, following JCI's documented lifetime caveat.
+
+Changing a server, account, API version or protected password retires the old cached client after the settings save succeeds. Clearing credentials/removing a recipient prevents new leases from using its old token; already admitted operations release their transport when finished. Application shutdown releases the cache. Tokens remain in memory only. A saved connection test actually contacts the server with token refresh (or an initial login), rather than merely reporting that a cached token exists. Tests with explicitly entered new credentials use an isolated temporary client.
+
+The public API v4/v5/v6 specifications document `/login` and `/refreshToken`, but no logout/revocation operation. Disposing an HTTP client is not a server logout, and Point Bridge does not invent a logout request or misuse the separate private human UI logout API. Reusing/refreshing the existing bearer avoids unnecessary password logins; unreferenced local tokens are discarded, while server token expiry remains controlled by Metasys. A 403 is surfaced without replaying the denied operation or retrying a password login.
+
 Do not infer that any point is writable. Validate type, units, ranges, quality, permissions, and command schema. Make explicit write priority available only for supported command schemas. Keep this bridge one-way. Treat long-outage recovery as current-state synchronization; it cannot promise every intermediate transition.
