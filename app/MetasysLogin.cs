@@ -11,6 +11,7 @@ using Microsoft.Extensions.Options;
 public sealed class MetasysLoginOptions
 {
     public bool Enabled { get; set; }
+    public bool AllowAnyAuthenticatedUser { get; set; }
     public string ServerOrigin { get; set; } = "";
     public int SessionMinutes { get; set; } = 30;
     public MetasysLoginGrant[] Grants { get; set; } = [];
@@ -162,7 +163,7 @@ public sealed class MetasysSessions : BackgroundService
     { this.client = client; this.options = options; this.clock = clock; }
     private string? CurrentOrigin => MetasysOrigin.Normalize(options.CurrentValue.ServerOrigin);
     public bool Available => options.CurrentValue.Enabled && CurrentOrigin is { } origin &&
-        (options.CurrentValue.Grants ?? []).Any(g => ValidGrant(g) && MetasysOrigin.Normalize(g.ServerOrigin) == origin);
+        (options.CurrentValue.AllowAnyAuthenticatedUser || (options.CurrentValue.Grants ?? []).Any(g => ValidGrant(g) && MetasysOrigin.Normalize(g.ServerOrigin) == origin));
     internal int Count => sessions.Count;
     private static bool ValidGrant(MetasysLoginGrant? g) => g is not null &&
         MetasysOrigin.Normalize(g.ServerOrigin) is not null && !string.IsNullOrWhiteSpace(g.Username) && g.Username.Length <= 256 && !g.Username.Any(char.IsControl) &&
@@ -171,11 +172,12 @@ public sealed class MetasysSessions : BackgroundService
     private MetasysLoginGrant? Allowed(string origin, UiLogin login, UiIdentity identity)
     {
         if (!options.CurrentValue.Enabled || CurrentOrigin != origin) return null;
+        if (options.CurrentValue.AllowAnyAuthenticatedUser) return new() { ServerOrigin = origin, Username = identity.Username, StorageId = login.StorageId, ProfileId = identity.ProfileId, Role = "Admin" };
         var matches = (options.CurrentValue.Grants ?? []).Where(g => ValidGrant(g) && MetasysOrigin.Normalize(g.ServerOrigin) == origin && SameName(g.Username, identity.Username) && g.StorageId == login.StorageId && g.ProfileId == identity.ProfileId).ToArray();
         return matches.Length == 1 ? matches[0] : null;
     }
     private static string IdentityKey(string origin, MetasysLoginGrant grant) => "metasys:" + origin + ":" + grant.StorageId + ":" + grant.ProfileId;
-    private static void Check(UiLogin login, UiIdentity identity, string expected)
+    internal static void Check(UiLogin login, UiIdentity identity, string expected)
     {
         if (!login.Authenticated || !login.TermsAccepted || string.IsNullOrWhiteSpace(login.Token) || string.IsNullOrWhiteSpace(login.StorageId) ||
             !SameName(identity.Username, expected) || string.IsNullOrWhiteSpace(identity.ProfileId) || identity.AuthenticationType != "metasys" ||
@@ -187,7 +189,7 @@ public sealed class MetasysSessions : BackgroundService
         var username = request.Username?.Trim() ?? "";
         var origin = CurrentOrigin;
         if (!Available || string.IsNullOrEmpty(request.Password) ||
-            origin is null || !(options.CurrentValue.Grants ?? []).Any(g => ValidGrant(g) && MetasysOrigin.Normalize(g.ServerOrigin) == origin && SameName(g.Username, username))) return new(null, "account-not-granted");
+            origin is null || (!options.CurrentValue.AllowAnyAuthenticatedUser && !(options.CurrentValue.Grants ?? []).Any(g => ValidGrant(g) && MetasysOrigin.Normalize(g.ServerOrigin) == origin && SameName(g.Username, username)))) return new(null, "account-not-granted");
         string? token = null;
         var stage = "login";
         try
@@ -229,7 +231,7 @@ public sealed class MetasysSessions : BackgroundService
         try
         {
             if (!sessions.ContainsKey(id) || clock.GetUtcNow() >= session.Expires || !SameName(principal.Identity?.Name ?? "", session.Identity.Username) ||
-                !options.CurrentValue.Enabled || CurrentOrigin != session.ServerOrigin || !(options.CurrentValue.Grants ?? []).Contains(session.Grant) ||
+                !options.CurrentValue.Enabled || CurrentOrigin != session.ServerOrigin || (!options.CurrentValue.AllowAnyAuthenticatedUser && !(options.CurrentValue.Grants ?? []).Contains(session.Grant)) ||
                 principal.FindFirstValue("metasys_origin") != session.ServerOrigin || principal.FindFirstValue(ClaimTypes.NameIdentifier) != IdentityKey(session.ServerOrigin, session.Grant) ||
                 principal.FindFirstValue(ClaimTypes.Role) != "Admin") throw new InvalidOperationException();
             var refreshed = await client.RefreshAsync(session.ServerOrigin, session.Token, ct);

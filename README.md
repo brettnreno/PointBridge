@@ -2,11 +2,11 @@
 
 Point Bridge is a Windows service with a local web console for copying scalar data into Metasys points. It supports Metasys REST API v5/v6 source and recipient connections, optional read-only JSON API sources, and multiple recipient servers. The repository branch is **master**.
 
-Current version: **1.2.0 production-test candidate**. Builds are unsigned. Controlled local/fake-endpoint tests pass; customer installation, actual point behavior and independent Metasys notifications still need commissioning. It is not a pharmacy safety certification or a replacement for independent monitoring.
+Current version: **1.2.1 production-test candidate**. Builds are unsigned. Controlled local/fake-endpoint tests pass; customer installation, actual point behavior and independent Metasys notifications still need commissioning. It is not a pharmacy safety certification or a replacement for independent monitoring.
 
 ## What it does
 
-- A single ordinary sign-in form can authenticate explicitly admitted Metasys users. Every admitted user has Administrator access. API service-account credentials remain separate from human sign-in.
+- First-run setup verifies a login against Metasys installed on this computer and enables sign-in for all valid Metasys users. Every authenticated user has Administrator access. API service-account credentials remain separate from human sign-in. Existing installations configure this under User accounts.
 - Connection Save, Test and Clear credentials; point discovery/reference entry; type, unit, range, writability and supported-command/priority validation.
 - Metasys COV notifications trigger fresh source reads. Independent periodic source/readback checks default to300 seconds, including points whose values remain constant.
 - Per-mapping workers, bounded shared concurrency/deadlines, quality checks, destination readback, and conservative handling of uncertain writes.
@@ -71,7 +71,7 @@ Default service data: `%ProgramData%\MetasysPointBridge`. Configuration, saved A
 
 1. Keep the bundle's uninstall helper outside Program Files.
 2. Install the MSI as an administrator. It installs/starts the MetasysPointBridge service under LocalService, with restart actions and a loopback console shortcut.
-3. Open http://127.0.0.1:5088/ and complete initial setup locally.
+3. Open http://127.0.0.1:5088/ and complete setup using the installation code, local Metasys HTTPS address and a verified Metasys login. All valid users on that server can then sign in with Administrator access. Existing local-account installations use User accounts → Configure Metasys sign-in.
 4. In Admin / Connections configure and test source/destination API accounts. Credentials entered for Test are not saved unless you select Save.
 5. Configure a noncritical mapping and use Check points & permissions. Verify type/units, command semantics and priority, then explicitly start transfers only for the approved target.
 6. Verify actual readback, quiet-period reconciliation, restart behavior and the independent failure alarm before relying on copied trends/values.
@@ -80,7 +80,7 @@ The optional Install-Service.ps1 is an alternative for manually deployed runtime
 
 ## Metasys sign-in
 
-See [app/METASYS-LOGIN.md](app/METASYS-LOGIN.md). Merge the disabled example into the target's local websettings.json, configure the actual authentication origin and explicit canonical user IDs, then enable/restart the provider. Do not guess canonical IDs or admit all successful users automatically.
+See [app/METASYS-LOGIN.md](app/METASYS-LOGIN.md). First-run setup and User accounts configure the local Metasys server in the app, verify a login, and enable all valid Metasys users with Administrator access. No JSON editing or restart is required. The installer requires local Metasys core services and Metasys UI registration. Server addresses configured in the app must resolve to this computer.
 
 The authentication adapter uses the private Metasys UI JSON contract observed on a Metasys16 lab server. It is not represented as a supported public vendor login API. Different versions and account-state policies require target-side verification. Passwords are not saved by this provider; tokens stay in bounded server-side sessions and never enter browser cookies or logs. A provider failure does not silently fall back to local password checking.
 

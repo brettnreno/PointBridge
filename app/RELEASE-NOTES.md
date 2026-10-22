@@ -1,4 +1,12 @@
-# Release 1.2.0 — production-test candidate
+# Release 1.2.1 — production-test candidate
+
+First-run setup verifies a Metasys login against the local server and enables all valid Metasys users with Administrator access. No separate local account, user enrollment, manual identity IDs, JSON editing or service restart is required. Existing local-account installations use User accounts → Configure Metasys sign-in. Passwords and vendor tokens are not saved with settings. Server changes require fresh verification; local recovery remains available.
+
+The MSI requires local Metasys core and UI registration, includes the Signature table needed by AppSearch, and configures recovery with a checked elevated deferred sc.exe action instead of the failing native MsiConfigureServices action. Version 1.2.1 upgrades 1.2.0 while preserving ProgramData.
+
+The setup HTTP suite covers initial installation-code/CSRF protection, rejected credentials and remote origins, first-user setup, a second user without enrollment, disabled/substituted identities, persistence, immediate revocation, recovery login, and no point writes. Target Metasys versions and actual field operation still require commissioning.
+
+## Release 1.2.0 history
 
 Includes the staged authentication, connection-test/clear, per-mapping reliability, five-minute fallback verification, durable delivery recovery, scrubbed diagnostics, external JSON and multiple-recipient work. A fresh configured Metasys sign-in provider takes precedence over the optional local first-run setup screen. All explicitly admitted users have Administrator access.
 

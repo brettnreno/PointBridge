@@ -30,6 +30,8 @@ builder.Services.AddSingleton<Store>();
 #endif
 builder.Services.AddSingleton<UserStore>();
 builder.Services.Configure<MetasysLoginOptions>(builder.Configuration.GetSection("MetasysLogin"));
+builder.Services.AddSingleton<MetasysLoginSettings>();
+builder.Services.AddSingleton<Microsoft.Extensions.Options.IOptionsMonitor<MetasysLoginOptions>>(sp => sp.GetRequiredService<MetasysLoginSettings>());
 builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
 #if POINT_BRIDGE_AUTH_FIXTURES
 builder.Services.AddSingleton<IMetasysUiClient, FixtureMetasysClient>();
@@ -88,7 +90,7 @@ builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = 429;
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
-        context.Request.Path == "/api/auth/login" || context.Request.Path == "/api/auth/metasys/login" || context.Request.Path == "/api/auth/setup"
+        context.Request.Path == "/api/auth/login" || context.Request.Path == "/api/auth/metasys/login" || context.Request.Path == "/api/auth/setup" || context.Request.Path == "/api/auth/metasys/bootstrap" || context.Request.Path == "/api/auth/metasys/settings/users"
             ? RateLimitPartition.GetFixedWindowLimiter(context.Connection.RemoteIpAddress?.ToString() ?? "unknown", _ => new FixedWindowRateLimiterOptions { PermitLimit = 15, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 })
             : RateLimitPartition.GetNoLimiter("unlimited"));
     options.OnRejected = (context, _) => new ValueTask(context.HttpContext.Response.WriteAsJsonAsync(new { error = "Too many sign-in attempts. Please wait a minute." }));
@@ -136,7 +138,7 @@ app.Use(async (context, next) =>
 {
     var path = context.Request.Path;
     if (!path.StartsWithSegments("/api")) { await next(); return; }
-    var publicEndpoint = path == "/api/session" || path == "/api/auth/login" || path == "/api/auth/metasys/login" || path == "/api/auth/setup";
+    var publicEndpoint = path == "/api/session" || path == "/api/auth/login" || path == "/api/auth/metasys/login" || path == "/api/auth/setup" || path == "/api/auth/metasys/bootstrap";
     if (!publicEndpoint && context.User.Identity?.IsAuthenticated != true)
     { context.Response.StatusCode = 401; await context.Response.WriteAsJsonAsync(new { error = "Sign in to continue." }); return; }
     var requiresAdmin = path.StartsWithSegments("/api/connections") || path.StartsWithSegments("/api/auth/users");
@@ -183,6 +185,7 @@ app.MapGet("/api/session", (HttpContext context, UserStore users, MetasysSession
     role = context.User.IsInRole("Admin") ? "Admin" : context.User.IsInRole("Operator") ? "Operator" : null
 });
 app.MapAuthEndpoints();
+app.MapMetasysLoginSetup();
 app.MapBridgeEndpoints();
 #if POINT_BRIDGE_AUTH_FIXTURES
 app.MapFixtureAuthControl();

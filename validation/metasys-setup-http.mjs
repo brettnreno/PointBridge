@@ -1,0 +1,62 @@
+import fs from 'node:fs';
+const origin = 'http://127.0.0.1:15089';
+const folder = process.env.BRIDGE_TEST_DATA;
+let passed = 0;
+function check(value, label) { if (!value) throw new Error(label); passed++; console.log('PASS ' + label); }
+function client() { return {cookie: '', csrf: ''}; }
+async function request(user, path, method = 'GET', body) {
+    const response = await fetch(origin + path, {method, headers: {...(user.cookie ? {Cookie: user.cookie} : {}), ...(method !== 'GET' ? {'Content-Type': 'application/json', 'X-CSRF-Token': user.csrf, Origin: origin} : {})}, body: body === undefined ? undefined : JSON.stringify(body)});
+    for (const cookie of response.headers.getSetCookie()) if (cookie.startsWith('MetasysPointBridge.Session=')) user.cookie = cookie.split(';')[0];
+    const text = await response.text();
+    check(!text.includes('fixture-only-password') && !text.includes('fixture-token-not-real') && !text.includes('fixture-second-token-not-real'), 'no password or vendor token in response');
+    return {status: response.status, body: text ? JSON.parse(text) : null};
+}
+async function session(user) { const result = await request(user, '/api/session'); user.csrf = result.body.csrfToken; return result.body; }
+const first = client();
+check((await session(first)).setupRequired, 'fresh installation requires setup');
+check((await request(first, '/api/auth/metasys/settings')).status === 401, 'anonymous settings access denied');
+const setupCode = fs.readFileSync(folder + '/setup-code.txt', 'utf8').trim();
+const bootstrap = {setupCode, serverOrigin: 'https://fixture.invalid', username: 'fixture-user', password: 'fixture-only-password'};
+check((await request(first, '/api/auth/metasys/bootstrap', 'POST', {...bootstrap, setupCode: 'wrong'})).status === 403, 'setup requires installation code');
+check((await request({...first, csrf: 'wrong'}, '/api/auth/metasys/bootstrap', 'POST', bootstrap)).status === 403, 'setup requires CSRF token');
+check((await request(first, '/api/auth/metasys/bootstrap', 'POST', {...bootstrap, serverOrigin: 'https://192.0.2.1'})).status === 400, 'remote Metasys server refused');
+check((await request(first, '/api/auth/metasys/bootstrap', 'POST', {...bootstrap, password: 'wrong-password'})).status === 400, 'invalid Metasys password cannot complete setup');
+check((await session(first)).setupRequired, 'failed verification leaves setup recoverable');
+check((await request(first, '/api/auth/metasys/bootstrap', 'POST', bootstrap)).status === 200, 'first-run setup verifies Metasys without a local account');
+const configured = await session(first);
+check(!configured.setupRequired && configured.metasysLoginAvailable && !configured.authenticated, 'verified setup enables normal Metasys sign-in');
+check((await request(first, '/api/auth/metasys/bootstrap', 'POST', bootstrap)).status === 400, 'consumed setup cannot run again');
+check((await request(first, '/api/auth/setup', 'POST', {setupCode: 'Setup completed. This code is no longer valid.', username: 'attacker', password: 'fixture-attacker-password'})).status === 400, 'consumed setup cannot create local accounts');
+check((await request(first, '/api/auth/metasys/login', 'POST', {username: bootstrap.username, password: bootstrap.password})).status === 200, 'first verified Metasys user can sign in');
+check((await session(first)).role === 'Admin', 'Metasys user receives administrator permission');
+const second = client();
+await session(second);
+check((await request(second, '/api/auth/metasys/login', 'POST', {username: 'fixture-second-user', password: bootstrap.password})).status === 200, 'another valid Metasys user signs in without enrollment');
+check((await session(second)).username === 'fixture-second-user', 'second identity survives session refresh');
+check((await request(first, '/api/auth/metasys/settings', 'PUT', {serverOrigin: 'https://fixture.invalid', enabled: false})).status === 400, 'cannot disable the only login method without recovery access');
+check((await request(first, '/api/auth/users', 'POST', {username: 'fixture-recovery', password: 'fixture-recovery-password', role: 'Admin'})).status === 200, 'Metasys administrator can create local recovery account');
+const recovery = client();
+await session(recovery);
+check((await request(recovery, '/api/auth/login', 'POST', {username: 'fixture-recovery', password: 'fixture-recovery-password'})).status === 200, 'local recovery authentication remains available');
+const settings = '/api/auth/metasys/settings';
+check((await request(recovery, settings, 'PUT', {serverOrigin: 'https://fixture.invalid', enabled: false})).status === 200, 'administrator disables provider without restart');
+check(!(await session(second)).authenticated, 'disabling provider invalidates external sessions');
+check((await request(recovery, settings, 'PUT', {serverOrigin: 'https://fixture.invalid', enabled: true})).status === 200, 'verified server can be enabled again');
+await request(recovery, '/api/fixture/mode/disabled', 'POST', {});
+check((await request(second, '/api/auth/metasys/login', 'POST', {username: 'fixture-second-user', password: bootstrap.password})).status === 401, 'any-user mode rejects disabled users');
+await request(recovery, '/api/fixture/mode/substitute', 'POST', {});
+check((await request(second, '/api/auth/metasys/login', 'POST', {username: 'fixture-second-user', password: bootstrap.password})).status === 401, 'any-user mode rejects identity substitution');
+await request(recovery, '/api/fixture/mode/normal', 'POST', {});
+check((await request(recovery, settings, 'PUT', {serverOrigin: 'https://localhost', enabled: true})).status === 400, 'changed server cannot enable using previous server verification');
+check((await request(recovery, settings, 'PUT', {serverOrigin: 'https://localhost', enabled: false})).status === 200, 'server change saves disabled');
+check((await request(recovery, settings)).body.users.length === 0, 'server change clears previous server identities');
+check((await request(recovery, settings, 'PUT', {serverOrigin: 'https://fixture.invalid', enabled: false})).status === 200, 'restore fixture server for setup management test');
+check((await request(recovery, settings + '/users', 'POST', {serverOrigin: 'https://fixture.invalid', username: 'fixture-user', password: bootstrap.password})).status === 200, 'existing installation verifies server login through setup UI API');
+check((await request(recovery, settings, 'PUT', {serverOrigin: 'https://fixture.invalid', enabled: true})).status === 200, 'existing installation enables any-user sign-in through setup UI API');
+const saved = fs.readFileSync(folder + '/metasys-login.json', 'utf8');
+check(!saved.includes(bootstrap.password) && !saved.includes('token-not-real'), 'saved settings contain neither password nor token');
+check(JSON.parse(saved).AllowAnyAuthenticatedUser && JSON.parse(saved).Enabled, 'any-user provider settings persisted');
+check((await request(recovery, '/api/state')).body.armed === false, 'login setup never arms transfers');
+const fixture = (await request(recovery, '/api/fixture/status')).body;
+check(fixture.PointWrites === 0 || fixture.pointWrites === 0, 'login setup never writes points');
+console.log(`${passed} Metasys setup assertions passed; fake transports only.`);

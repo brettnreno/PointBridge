@@ -4,7 +4,31 @@ let sessionState, state, csrfToken, editingId = null, browseSide = null, page = 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let users=[],editingUser=null;
 async function bootstrap(){try{sessionState=await api('/api/session');csrfToken=sessionState.csrfToken;const signedIn=!!sessionState.authenticated;$('auth-screen').hidden=signedIn;$('app-shell').hidden=!signedIn;$('auth-error').hidden=true;if(!signedIn){document.querySelectorAll('dialog[open]').forEach(dialog=>dialog.close());const setup=!!sessionState.setupRequired;$('auth-title').textContent=setup?'Set up Point Bridge':'Sign in';$('auth-description').textContent=setup?'Create the first administrator account using your installation setup code.':(sessionState.metasysLoginAvailable?'Use your existing Metasys username and password.':'Use your Point Bridge administrator account.');$('setup-code-label').hidden=!setup;$('setup-code').required=setup;$('auth-password').minLength=setup?12:1;$('auth-password').autocomplete=setup?'new-password':'current-password';$('auth-submit').textContent=setup?'Create administrator':'Sign in';return;}document.querySelectorAll('.admin-only').forEach(element=>element.hidden=sessionState.role!=='Admin');$('account-label').textContent=`${sessionState.username} · ${sessionState.role}`;if(sessionState.role!=='Admin'&&['connections','users'].includes(page))document.querySelector('[data-page="mappings"]').click();await refresh();}catch(error){$('auth-screen').hidden=false;$('app-shell').hidden=true;$('auth-error').hidden=false;$('auth-error').textContent=error.message;}}
-$('auth-form').addEventListener('submit',async event=>{event.preventDefault();const button=$('auth-submit');button.disabled=true;$('auth-error').hidden=true;try{await api(sessionState?.setupRequired?'/api/auth/setup':(sessionState?.metasysLoginAvailable?'/api/auth/metasys/login':'/api/auth/login'),'POST',{username:$('auth-username').value.trim(),password:$('auth-password').value,...(sessionState?.setupRequired?{setupCode:$('setup-code').value.trim()}:{})});$('auth-password').value='';$('setup-code').value='';await bootstrap();}catch(error){$('auth-error').textContent=error.message;$('auth-error').hidden=false;}finally{button.disabled=false;}});
+$('auth-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    const button = $('auth-submit');
+    button.disabled = true;
+    $('auth-error').hidden = true;
+    const firstRunMetasys = sessionState?.setupRequired && !localRecovery;
+    const password = $('auth-password').value;
+    $('auth-password').value = '';
+    try {
+        const path = firstRunMetasys ? '/api/auth/metasys/bootstrap' : sessionState?.setupRequired ? '/api/auth/setup' : sessionState?.metasysLoginAvailable && !localRecovery ? '/api/auth/metasys/login' : '/api/auth/login';
+        await api(path, 'POST', {
+            username: $('auth-username').value.trim(), password,
+            ...(sessionState?.setupRequired ? {setupCode: $('setup-code').value.trim()} : {}),
+            ...(firstRunMetasys ? {serverOrigin: $('metasys-bootstrap-server').value.trim()} : {})
+        });
+        $('setup-code').value = '';
+        await bootstrap();
+        if (firstRunMetasys) {
+            $('auth-description').textContent = 'Metasys setup completed. Sign in with your Metasys username and password.';
+        }
+    } catch (error) {
+        $('auth-error').textContent = error.message;
+        $('auth-error').hidden = false;
+    } finally { button.disabled = false; }
+});
 $('sign-out').addEventListener('click',()=>busy($('sign-out'),async()=>{await api('/api/auth/logout','POST',{});state=null;await bootstrap();}));
 async function loadUsers(){try{const data=await api('/api/auth/users');users=Array.isArray(data)?data:data.items||data.users||[];$('users-list').innerHTML=`<table><thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead><tbody>${users.map(user=>`<tr><td><strong>${esc(user.username)}</strong></td><td>${esc(user.role)}</td><td>${user.enabled?'Enabled':'Disabled'}</td><td><button class="secondary" data-user="${esc(user.id)}">Edit / reset password</button></td></tr>`).join('')}</tbody></table>`;}catch(error){$('users-list').textContent=error.message;}}
 function openUser(user){editingUser=user?.id||null;$('user-title').textContent=user?'Edit account':'Add user';$('user-username').value=user?.username||'';$('user-username').readOnly=!!user;$('user-enabled').checked=user?.enabled??true;$('user-password').value='';$('user-password').required=!user;$('user-password-note').textContent=user?'Leave blank to keep the current password. New passwords need at least 12 characters.':'At least 12 characters.';$('user-error').hidden=true;$('user-dialog').showModal();}

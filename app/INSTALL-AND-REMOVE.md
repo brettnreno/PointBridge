@@ -1,12 +1,12 @@
-# Point Bridge 1.2.0 production-test candidate
+# Point Bridge 1.2.1 production-test candidate
 
 Unsigned Windows x64 test build with its own .NET10 runtime. It does not replace the server's installed .NET6 or Metasys runtime. The MSI requires Windows Server2016 or newer; actual customer OS, certificates, Metasys versions, service permissions and antivirus/application-control compatibility remain unverified.
 
 ## Install and initial test
 
 1. Keep this release folder, including Uninstall-PointBridge.ps1, outside Program Files so the removal helper remains available after MSI uninstall. Do not copy previous lab data or keys into the installation.
-2. Install MetasysPointBridge-1.2.0-production-test-x64.msi as an administrator. It installs the MetasysPointBridge Windows service under LocalService, configures service restart actions and starts the local console. An elevated deferred custom action runs Windows System32 sc.exe to configure restart actions and fails installation if configuration fails. The installer does not change Metasys objects or the shared .NET installation.
-3. Open http://127.0.0.1:5088/ on that server. A new installation has empty connections/mappings, transfers paused, external extensions off, Metasys human authentication disabled and no admitted users. Complete initial administrator setup using the local setup-code.txt in %ProgramData%\MetasysPointBridge. Metasys sign-in can then be configured as described in METASYS-LOGIN.md. API service accounts are separate from human sign-in.
+2. Install MetasysPointBridge-1.2.1-production-test-x64.msi as an administrator on a Metasys server. Installation requires the local MIIIDM service and Metasys UI registration; machines without these prerequisites are refused. It installs the MetasysPointBridge Windows service under LocalService, configures service restart actions and starts the local console. An elevated deferred custom action runs Windows System32 sc.exe to configure restart actions and fails installation if configuration fails. The installer does not change Metasys objects or the shared .NET installation.
+3. Open http://127.0.0.1:5088/ on that server. Enter the setup code from %ProgramData%\MetasysPointBridge\setup-code.txt, the trusted local Metasys HTTPS address and a Metasys username/password. Verification enables sign-in for all valid Metasys users with Administrator access; no local account or JSON editing is required. Existing installations use User accounts → Configure Metasys sign-in. Connections/mappings start empty and transfers paused. API service accounts remain separate. See METASYS-LOGIN.md.
 4. Save/Test the API connections, enter a noncritical mapping and Check points & permissions before explicitly starting transfers. API Test proves authentication, not actual point writes. Use normal HTTPS certificate validation; do not bypass trust failures.
 5. Confirm readback, a quiet five-minute source/readback check and restart behavior on the selected point. Watch Activity and Download diagnostics. Investigate a journal hold instead of deleting the journal or repeatedly retrying writes.
 

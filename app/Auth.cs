@@ -26,6 +26,7 @@ public sealed class UserStore
     private readonly object gate = new();
     private readonly string file;
     private readonly string setupFile;
+    private readonly string metasysSetupFile;
     private readonly List<BridgeUser> users;
     private readonly Dictionary<string, (int Count, DateTimeOffset Until)> failures = new(StringComparer.OrdinalIgnoreCase);
     private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web) { WriteIndented = true };
@@ -34,21 +35,44 @@ public sealed class UserStore
     {
         file = Path.Combine(location.Path, "users.json");
         setupFile = Path.Combine(location.Path, "setup-code.txt");
+        metasysSetupFile = Path.Combine(location.Path, "metasys-setup-complete.txt");
         users = File.Exists(file)
             ? JsonSerializer.Deserialize<List<BridgeUser>>(File.ReadAllText(file), Options) ?? []
             : [];
         foreach (var user in users) user.Role = "Admin"; // Single permission level, including legacy records.
-        if (users.Count == 0 && (!File.Exists(setupFile) || !System.Text.RegularExpressions.Regex.IsMatch(File.ReadAllText(setupFile).Trim(), "^[A-F0-9]{48}$")))
+        if (SetupRequired && (!File.Exists(setupFile) || !System.Text.RegularExpressions.Regex.IsMatch(File.ReadAllText(setupFile).Trim(), "^[A-F0-9]{48}$")))
             File.WriteAllText(setupFile, Convert.ToHexString(RandomNumberGenerator.GetBytes(24)));
     }
 
-    public bool SetupRequired { get { lock (gate) return users.Count == 0; } }
+    public bool SetupRequired { get { lock (gate) return users.Count == 0 && !File.Exists(metasysSetupFile); } }
+    public bool HasEnabledAdministrator { get { lock (gate) return users.Any(user => user.Enabled && user.Role == "Admin"); } }
+
+    public void ValidateSetupCode(string supplied)
+    {
+        lock (gate)
+        {
+            if (!SetupRequired) throw new InvalidOperationException("Initial setup is already complete.");
+            var expected = File.ReadAllText(setupFile).Trim();
+            if (!CryptographicOperations.FixedTimeEquals(System.Text.Encoding.UTF8.GetBytes(expected), System.Text.Encoding.UTF8.GetBytes(supplied?.Trim() ?? "")))
+                throw new UnauthorizedAccessException("Setup code is incorrect.");
+        }
+    }
+
+    public void CompleteMetasysSetup(string setupCode)
+    {
+        lock (gate)
+        {
+            ValidateSetupCode(setupCode);
+            File.WriteAllText(metasysSetupFile, "Metasys setup completed.");
+            File.WriteAllText(setupFile, "Setup completed. This code is no longer valid.");
+        }
+    }
 
     public BridgeUser Setup(SetupRequest request)
     {
         lock (gate)
         {
-            if (users.Count != 0) throw new InvalidOperationException("Initial setup is already complete.");
+            if (!SetupRequired) throw new InvalidOperationException("Initial setup is already complete.");
             var expected = File.ReadAllText(setupFile).Trim();
             var supplied = request.SetupCode?.Trim() ?? "";
             if (!CryptographicOperations.FixedTimeEquals(System.Text.Encoding.UTF8.GetBytes(expected), System.Text.Encoding.UTF8.GetBytes(supplied)))

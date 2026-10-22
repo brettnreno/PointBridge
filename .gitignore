@@ -8,6 +8,8 @@ work/
 **/data/
 **/keys/
 **/websettings.json
+**/metasys-login.json*
+**/metasys-setup-complete.txt
 **/config.json
 **/config.json.*
 **/users.json

@@ -76,7 +76,7 @@ try {
     foreach ($file in (Get-ChildItem -LiteralPath $publish -Recurse -File | Sort-Object FullName)) {
         $relative = $file.FullName.Substring($publish.Length+1)
         if ($relative -match '(^|\\)(data|logs|keys|obj|bin|work)(\\|$)' -or $file.Extension -in @('.pdb','.msi','.cab')) { continue }
-        if ($file.Name -in @('setup-code.txt','users.json','config.json','activity.jsonl','audit.jsonl')) { throw "Refusing to package mutable application data: $relative" }
+        if ($file.Name -in @('setup-code.txt','users.json','config.json','metasys-login.json','metasys-setup-complete.txt','websettings.json','activity.jsonl','audit.jsonl')) { throw "Refusing to package mutable application data: $relative" }
         $parentRelative = [IO.Path]::GetDirectoryName($relative)
         if (-not $parentRelative) { $parentRelative = '' }
         if (-not $directoryIds.ContainsKey($parentRelative)) {
@@ -134,10 +134,16 @@ try {
         @($upgradeCode,$null,$Version,$null,1,$null,'OLDPRODUCTS'),@($upgradeCode,$Version,$null,$null,258,$null,'NEWERPRODUCTFOUND')
     )
     # VersionNT is 603 on modern Windows for MSI compatibility; use the real build registry value.
-    Import-Table 'RegLocator' @('Signature_','Root','Key','Name','Type') @('s72','i2','s255','S255','I2') @('Signature_') @(,@('WindowsBuild',2,'SOFTWARE\Microsoft\Windows NT\CurrentVersion','CurrentBuildNumber',18))
-    Import-Table 'AppSearch' @('Property','Signature_') @('s72','s72') @('Property','Signature_') @(,@('WINBUILD','WindowsBuild'))
+    Import-Table 'RegLocator' @('Signature_','Root','Key','Name','Type') @('s72','i2','s255','S255','I2') @('Signature_') @(
+        @('WindowsBuild',2,'SOFTWARE\Microsoft\Windows NT\CurrentVersion','CurrentBuildNumber',18),
+        @('MetasysCoreService',2,'SYSTEM\CurrentControlSet\Services\MIIIDM','ImagePath',18),
+        @('MetasysUiServer',2,'SOFTWARE\Johnson Controls\Metasys UI Assets','InstallPath',18),
+        @('MetasysUiServer32',2,'SOFTWARE\Johnson Controls\Metasys UI Assets','InstallPath',2)
+    )
+    Import-Table 'AppSearch' @('Property','Signature_') @('s72','s72') @('Property','Signature_') @(@('WINBUILD','WindowsBuild'),@('METASYSCORE','MetasysCoreService'),@('METASYSUI','MetasysUiServer'),@('METASYSUI32','MetasysUiServer32'))
     Import-Table 'Signature' @('Signature','FileName','MinVersion','MaxVersion','MinSize','MaxSize','MinDate','MaxDate','Languages') @('s72','s255','S20','S20','I4','I4','I4','I4','S255') @('Signature') @()
     Import-Table 'LaunchCondition' @('Condition','Description') @('s255','l255') @('Condition') @(
+        @('Installed OR (METASYSCORE AND (METASYSUI OR METASYSUI32))','Install Point Bridge on a Metasys server with Metasys core services and Metasys UI installed.'),
         @('Installed OR (VersionNT64 AND WINBUILD >= 14393 AND MsiNTProductType > 1)','Requires 64-bit Windows Server 2016 or later (build 14393 or newer).'),
         @('Installed OR NOT NEWERPRODUCTFOUND','A newer version of Metasys Point Bridge is already installed.'),
         @('Installed OR Privileged','Administrator privileges are required to install Point Bridge.')

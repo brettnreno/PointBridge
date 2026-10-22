@@ -9,19 +9,22 @@ public sealed class FixtureMetasysClient : IMetasysUiClient
         Calls++;
         if (Mode == "tls") throw new HttpRequestException(Token, new System.Security.Authentication.AuthenticationException(Token));
         if (Mode == "outage") throw new HttpRequestException(Token);
-        return Task.FromResult(new UiLogin(username == "fixture-user" && password == "fixture-only-password", true, "101", Token));
+        var second = username == "fixture-second-user";
+        return Task.FromResult(new UiLogin((username == "fixture-user" || second) && password == "fixture-only-password", true, second ? "102" : "101", second ? "fixture-second-token-not-real" : Token));
     }
     public Task<UiLogin> RefreshAsync(string origin, string token, CancellationToken ct)
     {
         Calls++;
         if (Mode == "tls") throw new HttpRequestException(Token, new System.Security.Authentication.AuthenticationException(Token));
         if (Mode == "outage") throw new HttpRequestException(Token);
-        return Task.FromResult(new UiLogin(true, true, "101", Token));
+        var second = token == "fixture-second-token-not-real";
+        return Task.FromResult(new UiLogin(true, true, second ? "102" : "101", token));
     }
     public Task<UiIdentity> IdentityAsync(string origin, string token, CancellationToken ct)
     {
         Calls++;
-        return Task.FromResult(new UiIdentity(Mode == "substitute" ? "wrong-user" : "fixture-user", "fixture-id", "metasys", Mode == "disabled" ? ["Disabled"] : ["Active"]));
+        var second = token == "fixture-second-token-not-real";
+        return Task.FromResult(new UiIdentity(Mode == "substitute" ? "wrong-user" : second ? "fixture-second-user" : "fixture-user", second ? "fixture-second-id" : "fixture-id", "metasys", Mode == "disabled" ? ["Disabled"] : ["Active"]));
     }
     public Task LogoutAsync(string origin, string token) { LogoutCalls++; return Task.CompletedTask; }
 }
