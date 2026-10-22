@@ -1,0 +1,21 @@
+{
+  "name": "NWS station temperature — configure and review before use",
+  "enabled": false,
+  "url": "",
+  "valuePointer": "/properties/temperature/value",
+  "timestampPointer": "/properties/timestamp",
+  "unitPointer": "/properties/temperature/unitCode",
+  "inputUnit": "wmoUnit:degC",
+  "outputUnit": "",
+  "unitAliasConfirmed": false,
+  "valueType": "number",
+  "pollSeconds": 300,
+  "maxAgeSeconds": 0,
+  "timeoutSeconds": 10,
+  "userAgent": "",
+  "authMode": "none",
+  "authHeader": "",
+  "secret": "",
+  "qualityPointer": "",
+  "reliableQualityValue": ""
+}

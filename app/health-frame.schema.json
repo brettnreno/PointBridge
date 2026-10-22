@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Point Bridge offline watchdog health frame v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "runtimeInstance", "processSequence", "capturedAt", "transfersArmed", "overallHealthy", "scope", "mappings"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "runtimeInstance": {"type": "string", "pattern": "^[a-fA-F0-9]{32}$"},
+    "processSequence": {"type": "integer", "minimum": 1},
+    "capturedAt": {"type": "string", "format": "date-time"},
+    "transfersArmed": {"type": "boolean"},
+    "overallHealthy": {"type": "boolean"},
+    "scope": {"const": "communication-and-delivery-only; physical-observation-age-not-established"},
+    "mappings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["mappingId", "sourceCommunicationHealthy", "sourceQualityReported", "sourceQualityReliable", "destinationConfirmed", "destinationQualityReported", "destinationQualityReliable", "workerProgressing", "completedChecks", "code"],
+        "properties": {
+          "mappingId": {"type": "string", "minLength": 1},
+          "sourceCommunicationHealthy": {"type": "boolean"},
+          "sourceQualityReported": {"type": "boolean"},
+          "sourceQualityReliable": {"type": "boolean"},
+          "destinationConfirmed": {"type": "boolean"},
+          "destinationQualityReported": {"type": "boolean"},
+          "destinationQualityReliable": {"type": "boolean"},
+          "workerProgressing": {"type": "boolean"},
+          "completedChecks": {"type": "integer", "minimum": 0},
+          "code": {"enum": ["none", "worker-progress-unconfirmed", "source-health-unconfirmed", "destination-delivery-unconfirmed", "source-quality-unconfirmed", "destination-quality-unconfirmed", "mapping-operation-unhealthy"]}
+        }
+      }
+    }
+  }
+}

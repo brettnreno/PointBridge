@@ -1,0 +1,8 @@
+{
+  "MetasysLogin": {
+    "Enabled": false,
+    "ServerOrigin": "https://metasys-server.example",
+    "SessionMinutes": 30,
+    "Grants": []
+  }
+}

@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings><EnableDefaultCompileItems>false</EnableDefaultCompileItems><DefineConstants>$(DefineConstants);POINT_BRIDGE_AUTH_FIXTURES</DefineConstants></PropertyGroup>
+  <ItemGroup><Compile Include="../../app/*.cs"/><Compile Include="FixtureMetasysClient.cs"/><PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.13"/></ItemGroup>
+</Project>

@@ -1,0 +1,52 @@
+name: Build and test Point Bridge
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pointbridge-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-x64:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      DOTNET_GENERATE_ASPNET_CERTIFICATE: 'false'
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build, run fake-only regressions, and package Windows x64 MSI
+        run: ./scripts/Build.ps1
+      - name: Upload unsigned installer and complete-removal helper
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: PointBridge-windows-x64-${{ github.run_number }}
+          path: artifacts/packages/*
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload build and synthetic-test logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: PointBridge-test-logs-${{ github.run_number }}
+          path: artifacts/logs/*
+          if-no-files-found: warn
+          retention-days: 14

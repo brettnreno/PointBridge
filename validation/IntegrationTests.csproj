@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <Compile Remove="GeneratedBackend.cs" />
+    <Compile Include="../app/Models.cs" Link="Production/Models.cs" />
+    <Compile Include="../app/Store.cs" Link="Production/Store.cs" />
+    <Compile Include="../app/Api.cs" Link="Production/Api.cs" />
+    <Compile Include="../app/Bridge.cs" Link="Production/Bridge.cs" />
+    <Compile Include="../app/RecoveryJournal.cs" Link="Production/RecoveryJournal.cs" />
+    <Compile Include="../app/Troubleshooting.cs" Link="Production/Troubleshooting.cs" />
+    <Compile Include="../app/HealthWatchdog.cs" Link="Production/HealthWatchdog.cs" />
+    <Compile Include="../app/ExternalJson.cs" Link="Production/ExternalJson.cs" />
+    <Compile Include="../app/Preflight.cs" Link="Production/Preflight.cs" Condition="Exists('../app/Preflight.cs')" />
+    <Compile Include="../app/AuditLog.cs" Link="Production/AuditLog.cs" Condition="Exists('../app/AuditLog.cs')" />
+    <Compile Include="../app/ActivityLog.cs" Link="Production/ActivityLog.cs" Condition="Exists('../app/ActivityLog.cs')" />
+  </ItemGroup>
+</Project>
