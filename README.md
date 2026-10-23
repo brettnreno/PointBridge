@@ -6,18 +6,20 @@ Current version: **1.2.7 release candidate**. Builds are unsigned. The operator 
 
 ## Appearance
 
-The console uses locally bundled Noto Sans, matching the installed Metasys UI font family. Sign-in always uses the same dark appearance, without theme controls. After sign-in, the sidebar offers Light, Dark, System, and Boomer modes; Dark is the default. System follows your operating-system preference. The Show/Hide menu button collapses the sidebar and expands the workspace. Theme and menu preferences stay in this browser only; they do not change server configuration or transfer behavior. Boomer mode deliberately uses bold Comic Sans and high-saturation colors. The blue/teal angular pinwheel also serves as the browser favicon. Earlier screenshots below show previous console styling. Bundled Noto fonts are distributed under the SIL Open Font License in `app/wwwroot/fonts/LICENSE.txt`.
+The console uses locally bundled Noto Sans, matching the installed Metasys UI font family. Sign-in always uses the same dark appearance, without theme controls. After sign-in, the sidebar offers Light, Dark, System, and Boomer modes; Dark is the default. System follows your operating-system preference. The Show/Hide menu button collapses the sidebar and expands the workspace. Theme and menu preferences stay in this browser only; they do not change server configuration or transfer behavior. Boomer mode deliberately uses bold Comic Sans and high-saturation colors. The blue/teal angular pinwheel also serves as the browser favicon. Bundled Noto fonts are distributed under the SIL Open Font License in `app/wwwroot/fonts/LICENSE.txt`.
 
 ## Screenshots
 
-### Discovery and inspection (1.2.3)
+All screenshots show the **1.2.7 console in Light mode**, including the blue/teal pinwheel, Noto Sans typography, theme selector, and collapsible sidebar. The login screen remains dark by design; the setup image below shows the signed-in configuration dialog instead.
+
+### Discovery and inspection
 
 Browse object hierarchies, network devices, equipment and spaces directly in a mapping. Read up to 50 visible values in one read-only batch, with quality/priority and individual failures shown separately. Inspect a point's current metadata, trends, alarms and redacted audits without writing or acknowledging anything. See [operating limits and security](app/METASYS-EXPLORER.md).
 
-![Equipment point browser and batched values](docs/screenshots/point-explorer.png)
-![Read-only Metasys point inspector](docs/screenshots/point-inspector.png)
+![Light-mode point browser with three synthetic points and batched value reads](docs/screenshots/point-explorer.png)
+![Light-mode read-only point inspector showing synthetic value, units, quality and command metadata](docs/screenshots/point-inspector.png)
 
-These captures use an isolated demo with synthetic accounts, reserved `.invalid` server addresses and fake point data. Transfers remain paused; no customer configuration or credentials are shown.
+These captures use the actual console frontend with an isolated, read-only mock API, synthetic account labels, reserved `.invalid` server addresses, and fake point data. They illustrate the interface, not live Metasys validation. Transfers remain paused; no Windows service, real accounts, customer configuration, credentials, or live Metasys connections are used.
 
 **Point mappings** — review source and destination servers, manage mappings, and start or pause transfers.
 
@@ -42,11 +44,11 @@ Check current values, data types, units and destination writability before enabl
 </details>
 
 <details>
-<summary>First-run Metasys setup</summary>
+<summary>Metasys sign-in configuration</summary>
 
-Configure and verify Metasys sign-in through the app without editing JSON.
+Configure and verify Metasys sign-in through User accounts without editing JSON. This signed-in setup dialog follows the selected theme; initial sign-in always uses its fixed dark appearance.
 
-![First-run setup form with empty installation-code, Metasys server and sign-in fields](docs/screenshots/setup.png)
+![Light-mode Metasys sign-in configuration with a reserved demo server and empty verification credentials](docs/screenshots/setup.png)
 
 </details>
 
