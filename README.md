@@ -4,6 +4,10 @@ Point Bridge is a Windows service with a local web console for copying scalar da
 
 Current version: **1.2.5 production-test candidate**. Builds are unsigned. Controlled local/fake-endpoint tests pass; customer installation, actual point behavior and independent Metasys notifications still need commissioning. It is not a pharmacy safety certification or a replacement for independent monitoring.
 
+## Appearance
+
+The console includes Light, Dark, System, and Boomer modes, available on the sign-in screen and in the sidebar. System follows your operating-system preference. Your selection stays in this browser only; it does not change server configuration or transfer behavior. Boomer mode deliberately uses bold Comic Sans and high-saturation colors. The blue/teal angular pinwheel also serves as the browser favicon. Earlier screenshots below show previous console styling.
+
 ## Screenshots
 
 ### Discovery and inspection (1.2.3)

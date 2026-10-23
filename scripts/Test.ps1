@@ -31,6 +31,7 @@ try{
             $env:METASYS_BRIDGE_DATA=$oldData;$env:BRIDGE_TEST_DATA=$oldTestData
         }
     }
-    foreach($file in @('app/wwwroot/app.js','app/wwwroot/extensions.js','app/wwwroot/metasys-setup.js','app/wwwroot/explorer.js')){& $node --check $file;if($LASTEXITCODE -ne 0){throw 'JavaScript syntax check failed.'}}
+    & $node (Join-Path $root 'validation/theme.mjs');if($LASTEXITCODE -ne 0){throw 'Theme tests failed.'}
+    foreach($file in @('app/wwwroot/app.js','app/wwwroot/extensions.js','app/wwwroot/metasys-setup.js','app/wwwroot/explorer.js','app/wwwroot/theme.js')){& $node --check $file;if($LASTEXITCODE -ne 0){throw 'JavaScript syntax check failed.'}}
 }finally{Pop-Location}
 Write-Host 'All tests passed. Only in-memory transports/local fake endpoints were used. Temporary synthetic data stays outside artifacts.'
