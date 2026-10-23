@@ -1,4 +1,12 @@
-# Release 1.2.5 — production-test candidate
+# Release 1.2.6 — production-test candidate
+
+Refreshes the web console with blue/teal angular pinwheel branding, an SVG favicon, updated typography, and Light, Dark, System, and Boomer themes. Boomer deliberately uses bold Comic Sans and saturated colors. Theme selection is available on sign-in and in the sidebar, persists only in browser storage, and follows operating-system appearance when System is selected. Dialogs, discovery, inspection, and error states use the selected palette. No external fonts or services are required.
+
+Theme regression tests cover all modes, persistence, system appearance changes, cross-tab synchronization, invalid preferences, and blocked browser storage. Authentication, certificate checks, API behavior, transfer safeguards, and readback verification are unchanged. The 1.2.5 unused-schema HTTP 403 fix is included.
+
+Pause transfers and run the MSI over the existing installation; do not uninstall first. ProgramData configuration, mappings, and accounts are retained. Ports are unchanged. Builds remain unsigned; actual customer installation and point behavior require commissioning.
+
+## Release 1.2.5 history
 
 Fixes preflight unnecessarily fetching unused enum definitions and schemas for unsupported or permission-denied commands. A numeric adjustment could otherwise fail with destination HTTP 403 on `/api/v4/schemas/enums/attributeEnumSet`, even when that enum was not needed by the selected adjustment. Schema expansion now follows active references without eagerly expanding definition catalogs. Only permitted, nonaggregate adjust-command candidates have their command schemas expanded.
 
