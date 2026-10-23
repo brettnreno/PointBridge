@@ -1,4 +1,14 @@
-# Release 1.2.6 — production-test candidate
+# Release 1.2.7 — release candidate
+
+Uses locally bundled Noto Sans, matching the installed Metasys UI font family. The sign-in page always uses a fixed dark appearance with no theme controls. Light, Dark, System, and Boomer choices are available only after sign-in; Dark is the default when no preference is saved. Signing out restores the fixed login appearance, including after Boomer mode. A Show/Hide menu button collapses the sidebar and expands the workspace; the menu preference stays in browser storage.
+
+Removes production-test labeling from current package names and version metadata. The operator has confirmed successful installation and operation in their Metasys environment. Automated tests cover login/theme transitions, default appearance, menu visibility and persistence, blocked browser storage, bundled fonts, and the existing API and recovery contracts. This does not establish compatibility with every deployment or commission independent Metasys health publishing/notifications.
+
+The existing Automatic Windows service runs without Windows sign-in or an open console, retains the saved Start/Pause choice across restarts, and retries while Metasys becomes available. Verify unattended boot on the installed server during a controlled maintenance window; no real server reboot is claimed by automated tests.
+
+Pause transfers and run MetasysPointBridge-1.2.7-x64.msi over the existing installation; do not uninstall first. ProgramData configuration, mappings, accounts, and ports are retained. Refresh the console with Ctrl+F5 after upgrading. The installer remains unsigned.
+
+## Release 1.2.6 history
 
 Refreshes the web console with blue/teal angular pinwheel branding, an SVG favicon, updated typography, and Light, Dark, System, and Boomer themes. Boomer deliberately uses bold Comic Sans and saturated colors. Theme selection is available on sign-in and in the sidebar, persists only in browser storage, and follows operating-system appearance when System is selected. Dialogs, discovery, inspection, and error states use the selected palette. No external fonts or services are required.
 

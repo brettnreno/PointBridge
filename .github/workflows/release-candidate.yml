@@ -9,7 +9,7 @@ on:
         description: 'Release candidate tag matching the project version (for example v1.2.1-rc.1)'
         required: true
         type: string
-        default: v1.2.6-rc.1
+        default: v1.2.7-rc.1
 
 permissions:
   contents: write
@@ -75,7 +75,7 @@ jobs:
 
           Requires a Windows Metasys server with local core services and Metasys UI installed. Complete Metasys sign-in setup locally after installation. Pause transfers before upgrading an existing installation.
 
-          This build is unsigned. Automated tests use fake endpoints; actual customer Metasys compatibility and point behavior still require verification. No credentials, local settings or test logs are attached.
+          This build is unsigned. The operator has confirmed successful use on their installed Metasys environment. Automated regressions use fake endpoints; verify compatibility and restart behavior at each deployment. Independent Metasys health publishing remains uncommissioned. No credentials, local settings or test logs are attached.
           "@
           $candidateNotes = ((Get-Content app/RELEASE-NOTES.md -Raw) -split '(?m)^## Release', 2)[0]
           $notes += "`n`n$candidateNotes"

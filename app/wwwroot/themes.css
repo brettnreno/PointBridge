@@ -1,3 +1,5 @@
+@font-face { font-family: 'Noto Sans'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/NotoSans-Regular.ttf') format('truetype'); }
+@font-face { font-family: 'Noto Sans'; font-style: normal; font-weight: 600 900; font-display: swap; src: url('/fonts/NotoSans-Bold.ttf') format('truetype'); }
 :root {
   --canvas: #f2f7fc;
   --surface: #fff;
@@ -16,7 +18,7 @@
   --paused: #795514;
   --paused-bg: #fff1cb;
   --focus: #008b92;
-  font-family: 'Segoe UI Variable Text', 'Segoe UI', Arial, sans-serif;
+  font-family: 'Noto Sans', 'Segoe UI', Arial, sans-serif;
   color: var(--text);
   background: var(--canvas);
 }
@@ -74,6 +76,10 @@ nav button:hover { background: var(--raised); color: var(--text); }
 .sidebar-foot, .sidebar-foot small { color: var(--muted); }
 .local-dot { background: var(--muted); }
 main { padding: 32px; }
+.workspace-toolbar { margin-bottom: 18px; }
+.menu-toggle { min-height: 40px; }
+:root[data-menu-collapsed=true] main { margin-left: 0; width: 100%; max-width: none; }
+aside { overflow-y: auto; }
 h1 { font-size: 30px; font-weight: 700; letter-spacing: -.8px; }
 h2, h3, td strong { color: var(--text); }
 p, label, summary, .muted, .eyebrow, .form-note, .footnote, .header-actions>span,

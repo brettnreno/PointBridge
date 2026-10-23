@@ -1,4 +1,4 @@
-# Metasys sign-in — 1.2.2 production-test candidate
+# Metasys sign-in
 
 Profile validation first requests private v6 userinfo. Only HTTP 404 triggers a private v5 userinfo request on the same verified HTTPS server, supporting the profile contract confirmed by the Metasys 13 diagnostic. Invalid profiles, rejected credentials and certificate errors fail closed. The same validation applies during session refresh; login credentials are never retried to select a profile version.
 

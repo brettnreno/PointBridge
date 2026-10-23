@@ -2,11 +2,11 @@
 
 Point Bridge is a Windows service with a local web console for copying scalar data into Metasys points. It supports Metasys REST API v5/v6 sources and v4/v5/v6 recipients, optional read-only JSON API sources, and multiple recipient servers. Select API v4 for a Metasys 12 destination and API v5 for Metasys 13. The repository branch is **master**.
 
-Current version: **1.2.6 production-test candidate**. Builds are unsigned. Controlled local/fake-endpoint tests pass; customer installation, actual point behavior and independent Metasys notifications still need commissioning. It is not a pharmacy safety certification or a replacement for independent monitoring.
+Current version: **1.2.7 release candidate**. Builds are unsigned. The operator has confirmed successful installation and operation in their Metasys environment, and automated regressions use local/fake endpoints. Verify compatibility and unattended restart behavior at each deployment. Independent Metasys health publishing/notifications remain uncommissioned. This is not a pharmacy safety certification or a replacement for independent monitoring.
 
 ## Appearance
 
-The console includes Light, Dark, System, and Boomer modes, available on the sign-in screen and in the sidebar. System follows your operating-system preference. Your selection stays in this browser only; it does not change server configuration or transfer behavior. Boomer mode deliberately uses bold Comic Sans and high-saturation colors. The blue/teal angular pinwheel also serves as the browser favicon. Earlier screenshots below show previous console styling.
+The console uses locally bundled Noto Sans, matching the installed Metasys UI font family. Sign-in always uses the same dark appearance, without theme controls. After sign-in, the sidebar offers Light, Dark, System, and Boomer modes; Dark is the default. System follows your operating-system preference. The Show/Hide menu button collapses the sidebar and expands the workspace. Theme and menu preferences stay in this browser only; they do not change server configuration or transfer behavior. Boomer mode deliberately uses bold Comic Sans and high-saturation colors. The blue/teal angular pinwheel also serves as the browser favicon. Earlier screenshots below show previous console styling. Bundled Noto fonts are distributed under the SIL Open Font License in `app/wwwroot/fonts/LICENSE.txt`.
 
 ## Screenshots
 

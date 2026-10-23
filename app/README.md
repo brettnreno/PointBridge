@@ -1,6 +1,6 @@
-# Point Bridge 1.2.0 production-test candidate
+# Point Bridge 1.2.7 release candidate
 
-Start with INSTALL-AND-REMOVE.md. This unsigned Windows x64 release bundles its own .NET10 runtime. It is a controlled-test candidate, not a pharmacy reliability certification.
+Start with INSTALL-AND-REMOVE.md. This unsigned Windows x64 release candidate bundles its own .NET10 runtime. The operator has confirmed successful use in their Metasys environment; this is not a pharmacy reliability certification.
 
 Features: single Metasys sign-in for explicitly admitted administrators; separate API service accounts; API Save/Test/Clear; Metasys COV with five-minute quiet-point reconciliation; type/unit/command validation; bounded independent mapping workers and readback; durable conservative restart recovery; external scalar JSON sources; multiple recipients; rotating logs and scrubbed local diagnostic download.
 
