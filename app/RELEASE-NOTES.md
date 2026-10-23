@@ -1,4 +1,14 @@
-# Release 1.2.7 — release candidate
+# Release 1.2.8 — security release candidate
+
+Protects all external-source URL queries at rest and hides them from public configuration. Legacy queries and application-owned config backups migrate in place without changing effective URLs or journal bindings. Schema version 3 prevents older binaries from silently dropping protected queries. Recovery password hashes gain version/work-factor metadata and upgrade on successful login without changing account IDs, passwords, or session stamps.
+
+Data ACLs use the Windows service SID with OWNER RIGHTS protection while retaining LocalService, the existing machine DPAPI key ring, ports, mappings, login configuration, and Start/Pause choice. The installer enables the SID before automatic service startup. New HTTPS helper firewall rules require explicit management/VPN addresses. Existing shared certificate permissions and customer firewall scopes are not revoked blindly.
+
+Adds private-response and COV size limits, safe unexpected-error reporting, optional approval-only Metasys access (existing any-user access remains unchanged), locked NuGet restores, immutable Actions revisions, and release provenance attestations. No Authenticode certificate is available; installers remain unsigned. See SECURITY-UPGRADE.txt for migration/downgrade guidance and real-MSI/reboot acceptance limits.
+
+Automated regressions and isolated Windows-service tests pass, including preserved credentials/settings and noninteractive restart. Actual MSI upgrade/rollback and full-server reboot remain unverified. Back up the complete ProgramData/MetasysPointBridge directory, including keys, and pause transfers before installing over the existing installation; do not uninstall first. A fresh browser sign-in may be required after restart. Older releases remain available for traceability, not as recommended deployments.
+
+## Release 1.2.7 history
 
 Uses locally bundled Noto Sans, matching the installed Metasys UI font family. The sign-in page always uses a fixed dark appearance with no theme controls. Light, Dark, System, and Boomer choices are available only after sign-in; Dark is the default when no preference is saved. Signing out restores the fixed login appearance, including after Boomer mode. A Show/Hide menu button collapses the sidebar and expands the workspace; the menu preference stays in browser storage.
 

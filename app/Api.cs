@@ -1,7 +1,10 @@
 using System.Text.Json.Nodes;
 public sealed class MetasysRequestException(string connection, HttpRequestMessage request, System.Net.HttpStatusCode status)
     : HttpRequestException($"{connection}: Metasys HTTP {(int)status} on {request.Method} {request.RequestUri!.AbsolutePath}. "
-        + "The server refused this request; check its API permissions, licensing and request limits. Query values and credentials are omitted.", null, status);
+        + "The server refused this request; check its API permissions, licensing and request limits. Query values and credentials are omitted.", null, status), ISafeError
+{
+    public string SafeMessage => Message;
+}
 public class Api : IDisposable
 {
     readonly HttpClient http;
@@ -108,7 +111,7 @@ public class Api : IDisposable
     {
         var identifiers = objectIds.Distinct().ToArray();
         if (identifiers.Length is < 1 or > 50 || identifiers.Any(identifier => !Guid.TryParse(identifier, out _)))
-            throw new ArgumentException("Choose between 1 and 50 object GUIDs for a read-only batch.");
+            throw new UserInputException("Choose between 1 and 50 object GUIDs for a read-only batch.");
         var requests = new JsonArray(identifiers.Select(identifier => (JsonNode)new JsonObject
             { ["id"] = identifier, ["relativeUrl"] = identifier + "/attributes/presentValue" }).ToArray());
         await Authenticate(ct);
@@ -123,7 +126,7 @@ public class Api : IDisposable
         try { return await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct); }
         catch (HttpRequestException exception) when (exception.InnerException is System.Security.Authentication.AuthenticationException)
         {
-            throw new IOException($"{ConnectionName}: HTTPS certificate validation failed on {request.Method} {request.RequestUri!.AbsolutePath}. Use the hostname on the certificate, verify its validity, and install the issuing CA in this machine's trusted certificate store. Certificate checks remain enabled.");
+            throw new UpstreamLimitException($"{ConnectionName}: HTTPS certificate validation failed on {request.Method} {request.RequestUri!.AbsolutePath}. Use the hostname on the certificate, verify its validity, and install the issuing CA in this machine's trusted certificate store. Certificate checks remain enabled.");
         }
     }
     static async Task<JsonNode?> ReadJson(HttpResponseMessage response, CancellationToken ct)
@@ -197,6 +200,8 @@ public class Api : IDisposable
         using var q = Request(HttpMethod.Get, "stream"); q.Headers.Accept.Add(new("text/event-stream"));
         using var r = await http.SendAsync(q, HttpCompletionOption.ResponseHeadersRead, streamToken); Ensure(r, q);
         using var reader = new StreamReader(await r.Content.ReadAsStreamAsync(streamToken));
+        var lines = new BoundedLineReader(reader);
+        var eventCharacters = 0;
         string evt = ""; List<string> data = [];
         var opened = DateTimeOffset.UtcNow; bool helloReceived = false;
         var lastEvent = opened;
@@ -207,7 +212,7 @@ public class Api : IDisposable
                 if (!helloReceived && DateTimeOffset.UtcNow - opened > TimeSpan.FromSeconds(15)) throw new IOException("COV stream did not provide a hello event.");
                 if (helloReceived && DateTimeOffset.UtcNow - lastEvent > TimeSpan.FromSeconds(90))
                     throw new IOException("COV stream heartbeat or update events stopped.");
-                var line = await reader.ReadLineAsync(streamToken).AsTask().WaitAsync(TimeSpan.FromSeconds(helloReceived ? 90 : 15), streamToken);
+                var line = await lines.ReadLineAsync(streamToken).WaitAsync(TimeSpan.FromSeconds(helloReceived ? 90 : 15), streamToken);
                 if (line == null) throw new IOException("COV stream disconnected.");
                 if (line.Length == 0)
                 {
@@ -217,10 +222,15 @@ public class Api : IDisposable
                         await handle(evt, string.Join("\n", data));
                         if (evt == "hello" || evt.StartsWith("object.values.", StringComparison.Ordinal)) lastEvent = DateTimeOffset.UtcNow;
                     }
-                    evt = ""; data.Clear();
+                    evt = ""; data.Clear(); eventCharacters = 0;
                 }
                 else if (line.StartsWith("event:")) evt = line[6..].Trim();
-                else if (line.StartsWith("data:")) data.Add(line[5..].TrimStart());
+                else if (line.StartsWith("data:"))
+                {
+                    eventCharacters += line.Length;
+                    if (eventCharacters > 262144 || data.Count >= 1024) throw new UpstreamLimitException("COV stream event exceeded its safety limit.");
+                    data.Add(line[5..].TrimStart());
+                }
             }
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)

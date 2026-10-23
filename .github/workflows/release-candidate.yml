@@ -9,10 +9,12 @@ on:
         description: 'Release candidate tag matching the project version (for example v1.2.1-rc.1)'
         required: true
         type: string
-        default: v1.2.7-rc.1
+        default: v1.2.8-rc.1
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 concurrency:
   group: release-candidate-${{ inputs.tag || github.ref_name }}
@@ -31,7 +33,7 @@ jobs:
       run:
         shell: pwsh
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
       - name: Validate release candidate version
@@ -42,12 +44,16 @@ jobs:
           if ($env:CANDIDATE_TAG -notmatch ('^v' + [regex]::Escape($version) + '-rc\.[1-9][0-9]*$')) {
             throw "Candidate tag must match the project version: v$version-rc.N"
           }
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
         with:
-          dotnet-version: '10.0.x'
+          global-json-file: global.json
       - name: Test and build the Windows installer
         run: ./scripts/Build.ps1
-      - name: Publish installer and bundle on GitHub Releases
+      - name: Attest release artifact provenance
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
+        with:
+          subject-path: artifacts/packages/*
+      - name: Publish verified installer and bundle on GitHub Releases
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -73,6 +79,8 @@ jobs:
 
           Download the bundle ZIP under Assets for the installer, SHA256 checksums and installation/removal instructions. The MSI is also available separately.
 
+          Release files have GitHub build-provenance attestations. Maintainers can verify a downloaded file with gh attestation verify FILE --repo $env:GITHUB_REPOSITORY. This supplements checksums; it is not Windows Authenticode signing.
+
           Requires a Windows Metasys server with local core services and Metasys UI installed. Complete Metasys sign-in setup locally after installation. Pause transfers before upgrading an existing installation.
 
           This build is unsigned. The operator has confirmed successful use on their installed Metasys environment. Automated regressions use fake endpoints; verify compatibility and restart behavior at each deployment. Independent Metasys health publishing remains uncommissioned. No credentials, local settings or test logs are attached.
@@ -88,7 +96,7 @@ jobs:
           "## Release candidate`n`n[Download installer and bundle]($releaseUrl)" | Add-Content $env:GITHUB_STEP_SUMMARY
       - name: Retain build and synthetic-test logs
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: PointBridge-release-logs-${{ github.run_number }}
           path: artifacts/logs/*

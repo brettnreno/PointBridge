@@ -12,7 +12,7 @@ public static class MetasysExplorer
 {
     const int PageSize = 50;
     static string Identifier(string value) => Guid.TryParse(value, out var identifier) ? identifier.ToString()
-        : throw new ArgumentException("Enter a Metasys object GUID.");
+        : throw new UserInputException("Enter a Metasys object GUID.");
     static JsonArray Items(JsonNode? response) => response as JsonArray ?? (response as JsonObject)?["items"] as JsonArray
         ?? throw new IOException("Metasys returned an invalid collection response.");
     static string? Text(JsonNode? value) => value is JsonValue scalar && scalar.TryGetValue<string>(out var text)
@@ -22,7 +22,7 @@ public static class MetasysExplorer
 
     public static async Task<ExplorerPage> Browse(Api api, string kind, string? parent, int page, CancellationToken ct)
     {
-        if (page is < 1 or > 10000) throw new ArgumentException("Page must be between 1 and 10000.");
+        if (page is < 1 or > 10000) throw new UserInputException("Page must be between 1 and 10000.");
         var identifier = parent == null ? null : Identifier(parent);
         var route = kind switch
         {
@@ -33,10 +33,10 @@ public static class MetasysExplorer
             "spaceEquipment" when identifier != null => $"spaces/{identifier}/equipment",
             "equipmentPoints" when identifier != null => $"equipment/{identifier}/points",
             "deviceObjects" when identifier != null => $"objects/{identifier}/objects",
-            _ => throw new ArgumentException("Choose a supported discovery branch.")
+            _ => throw new UserInputException("Choose a supported discovery branch.")
         };
         var hierarchy = kind is "objects" or "deviceObjects";
-        if (hierarchy && page != 1) throw new ArgumentException("Object hierarchy does not support numbered pages.");
+        if (hierarchy && page != 1) throw new UserInputException("Object hierarchy does not support numbered pages.");
         route += hierarchy ? "?depth=1&flatten=true" : $"?page={page}&pageSize={PageSize}";
         var response = await api.Get(route, ct);
         var rawItems = Items(response);
@@ -76,7 +76,7 @@ public static class MetasysExplorer
 
     public static async Task<JsonObject> ReadValues(Api api, string[] identifiers, CancellationToken ct)
     {
-        if (identifiers.Length is < 1 or > PageSize) throw new ArgumentException("Choose between 1 and 50 point GUIDs.");
+        if (identifiers.Length is < 1 or > PageSize) throw new UserInputException("Choose between 1 and 50 point GUIDs.");
         var expected = identifiers.Select(Identifier).Distinct().ToArray();
         var response = await api.ReadBatch(expected, ct);
         var responses = (response as JsonObject)?["responses"] as JsonArray ?? throw new IOException("Metasys returned an invalid batch response.");
@@ -103,11 +103,11 @@ public static class MetasysExplorer
     public static async Task<JsonObject> Inspect(Api api, string reference, string view, DateTimeOffset start,
         DateTimeOffset end, int page, string? continuation, CancellationToken ct)
     {
-        if (reference.Length is < 1 or > 2048) throw new ArgumentException("Enter a point GUID or reference (maximum 2048 characters).");
-        if (view is not ("summary" or "trends" or "alarms" or "audits")) throw new ArgumentException("Choose a supported inspection view.");
+        if (reference.Length is < 1 or > 2048) throw new UserInputException("Enter a point GUID or reference (maximum 2048 characters).");
+        if (view is not ("summary" or "trends" or "alarms" or "audits")) throw new UserInputException("Choose a supported inspection view.");
         if (end <= start || end - start > TimeSpan.FromDays(7) || end > DateTimeOffset.UtcNow.AddMinutes(5))
-            throw new ArgumentException("Choose a past time range of up to seven days.");
-        if (page is < 1 or > 10000 || continuation?.Length > 8192) throw new ArgumentException("Invalid inspection page.");
+            throw new UserInputException("Choose a past time range of up to seven days.");
+        if (page is < 1 or > 10000 || continuation?.Length > 8192) throw new UserInputException("Invalid inspection page.");
         var id = await api.Resolve(reference, ct);
         if (view == "summary")
         {
@@ -130,7 +130,7 @@ public static class MetasysExplorer
         }
         var range = "startTime=" + Uri.EscapeDataString(start.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture))
             + "&endTime=" + Uri.EscapeDataString(end.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
-        if (view == "trends" && api.ApiVersion != "v4" && page != 1) throw new ArgumentException("This API version does not support numbered trend pages. Narrow the time range instead.");
+        if (view == "trends" && api.ApiVersion != "v4" && page != 1) throw new UserInputException("This API version does not support numbered trend pages. Narrow the time range instead.");
         var trendRange = "startSampleTime=" + Uri.EscapeDataString(start.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture))
             + "&endSampleTime=" + Uri.EscapeDataString(end.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
         var route = view == "trends" ? $"objects/{id}/trendedAttributes/presentValue/samples?"

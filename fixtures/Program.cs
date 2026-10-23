@@ -166,6 +166,7 @@ using (var legacyClient = new MetasysUiClient(new HttpClient(legacyTransport)))
     Assert(legacyTransport.Paths.Count(path => path == "/API/private-api/v5/userinfo") == 2, "v5 profile used for login and refreshed session");
     Assert(legacyTransport.Paths.Count(path => path.EndsWith("/LogOut")) == 1 && legacySessions.Count == 0, "v5 session logout removes access");
 }
+await SecurityFixtures.Run(Assert);
 Console.WriteLine($"{passed} adapter assertions passed; fake transports only, no live authentication.");
 } catch(Exception error) { Console.Error.WriteLine(error.Message.StartsWith("Fixture failed:") ? error.Message : "FAIL authentication fixture: "+error.GetType().Name); Environment.ExitCode=1; }
 

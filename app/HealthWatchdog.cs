@@ -125,7 +125,7 @@ public sealed class IndependentHealthWatchdog
     {
         if (options.MaxHeartbeatSilence <= TimeSpan.Zero || options.MaxWorkerProgressSilence <= TimeSpan.Zero || options.RequiredMappingIds.Length == 0 ||
             options.RequiredMappingIds.Any(string.IsNullOrWhiteSpace) || options.RequiredMappingIds.Distinct().Count() != options.RequiredMappingIds.Length)
-            throw new ArgumentException("An independent watchdog needs expected mappings and a positive silence limit.");
+            throw new UserInputException("An independent watchdog needs expected mappings and a positive silence limit.");
         this.clock = clock; this.options = options;
     }
     public bool Receive(HealthFrame frame)

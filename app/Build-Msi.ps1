@@ -11,6 +11,9 @@ Set-StrictMode -Version Latest
 # References: learn.microsoft.com/windows/win32/msi/{serviceinstall-table,
 # msilockpermissionsex-table,msiserviceconfigfailureactions-table,cabinet-files}.
 if (-not [Environment]::Is64BitOperatingSystem) { throw 'Build on 64-bit Windows.' }
+$sidOutput = & (Join-Path $env:SystemRoot 'System32\sc.exe') showsid MetasysPointBridge
+$serviceSid = [regex]::Match(($sidOutput -join ' '),'S-1-5-80-(?:[0-9]+-){4}[0-9]+').Value
+if ($LASTEXITCODE -ne 0 -or !$serviceSid) { throw 'Could not derive the Windows service SID.' }
 $publish = (Resolve-Path -LiteralPath $PublishDirectory).Path.TrimEnd('\')
 if (-not (Test-Path -LiteralPath (Join-Path $publish 'apiTool.exe'))) { throw 'PublishDirectory must contain the self-contained apiTool.exe runtime.' }
 if (-not (Test-Path -LiteralPath (Join-Path $publish 'OpenConsole.url'))) { throw 'PublishDirectory must include OpenConsole.url.' }
@@ -120,10 +123,13 @@ try {
     Import-Table 'File' @('File','Component_','FileName','FileSize','Version','Language','Attributes','Sequence') @('s72','s72','l255','i4','S72','S20','I2','i4') @('File') $files.ToArray()
     Import-Table 'Media' @('DiskId','LastSequence','DiskPrompt','Cabinet','VolumeLabel','Source') @('i2','i4','L64','S255','S32','S72') @('DiskId') @(,@(1,$sequence,$null,'#payload.cab',$null,$null))
     Import-Table 'CreateFolder' @('Directory_','Component_') @('s72','s72') @('Directory_','Component_') @(,@('DATADIR','DataDirectory'))
-    Import-Table 'MsiLockPermissionsEx' @('MsiLockPermissionsEx','LockObject','Table','SDDLText','Condition') @('s72','s72','s32','l0','S255') @('MsiLockPermissionsEx') @(,@('DataAcl','DATADIR','CreateFolder','D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FA;;;LS)','NOT REMOVE'))
+    Import-Table 'MsiLockPermissionsEx' @('MsiLockPermissionsEx','LockObject','Table','SDDLText','Condition') @('s72','s72','s32','l0','S255') @('MsiLockPermissionsEx') @(,@('DataAcl','DATADIR','CreateFolder',('D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;RC;;;OW)(A;OICI;FA;;;'+$serviceSid+')'),'NOT REMOVE'))
     Import-Table 'ServiceInstall' @('ServiceInstall','Name','DisplayName','ServiceType','StartType','ErrorControl','LoadOrderGroup','Dependencies','StartName','Password','Arguments','Component_','Description') @('s72','l255','L255','i4','i4','i4','S255','S255','S255','S255','S255','s72','L255') @('ServiceInstall') @(,@('BridgeService','MetasysPointBridge','Metasys Point Bridge',16,2,32769,$null,$null,'NT AUTHORITY\LocalService',$null,$null,$serviceComponent,'Mirrors configured Metasys point values using change-of-value notifications.'))
     Import-Table 'ServiceControl' @('ServiceControl','Name','Event','Arguments','Wait','Component_') @('s72','l255','i2','L255','I2','s72') @('ServiceControl') @(,@('BridgeServiceControl','MetasysPointBridge',163,$null,1,$serviceComponent))
-    Import-Table 'CustomAction' @('Action','Type','Source','Target') @('s72','i2','S72','S255') @('Action') @(,@('ConfigureBridgeRecovery',3106,'System64Folder','"[System64Folder]sc.exe" failure MetasysPointBridge reset= 86400 actions= restart/5000/restart/15000/restart/60000'))
+    Import-Table 'CustomAction' @('Action','Type','Source','Target') @('s72','i2','S72','S255') @('Action') @(
+        @('ConfigureBridgeRecovery',3106,'System64Folder','"[System64Folder]sc.exe" failure MetasysPointBridge reset= 86400 actions= restart/5000/restart/15000/restart/60000'),
+        @('ConfigureBridgeSid',3106,'System64Folder','"[System64Folder]sc.exe" sidtype MetasysPointBridge unrestricted')
+    )
     Import-Table 'Registry' @('Registry','Root','Key','Name','Value','Component_') @('s72','i2','l255','L255','L0','s72') @('Registry') @(
         @('EventMessageFile',2,'SYSTEM\CurrentControlSet\Services\EventLog\Application\MetasysPointBridge','EventMessageFile','[INSTALLDIR]System.Diagnostics.EventLog.Messages.dll',$serviceComponent),
         @('EventTypes',2,'SYSTEM\CurrentControlSet\Services\EventLog\Application\MetasysPointBridge','TypesSupported','#7',$serviceComponent)
@@ -148,6 +154,7 @@ try {
     )
     $actions=@(@('FindRelatedProducts',$null,25),@('AppSearch',$null,50),@('LaunchConditions',$null,100),@('CostInitialize',$null,800),@('FileCost',$null,900),@('CostFinalize',$null,1000),@('MigrateFeatureStates',$null,1200),@('InstallValidate',$null,1400),@('InstallInitialize',$null,1500),@('RemoveExistingProducts','OLDPRODUCTS',1510),@('ProcessComponents',$null,1600),@('UnpublishFeatures',$null,1800),@('StopServices','VersionNT',1900),@('DeleteServices','VersionNT',2000),@('RemoveRegistryValues',$null,2600),@('RemoveShortcuts',$null,3200),@('RemoveFiles',$null,3500),@('RemoveFolders',$null,3600),@('CreateFolders',$null,3700),@('InstallFiles',$null,4000),@('CreateShortcuts',$null,4500),@('WriteRegistryValues',$null,5000),@('InstallServices','VersionNT',5800),@('MsiConfigureServices','VersionNT',5850),@('StartServices','VersionNT',5900),@('RegisterUser',$null,6000),@('RegisterProduct',$null,6100),@('PublishFeatures',$null,6300),@('PublishProduct',$null,6400),@('InstallFinalize',$null,6600))
     $actions=@($actions | Where-Object {$_[0] -ne 'MsiConfigureServices'})
+    $actions+=,@('ConfigureBridgeSid',('$'+$serviceComponent+'=3'),5820)
     $actions+=,@('ConfigureBridgeRecovery',('$'+$serviceComponent+'=3'),5850)
     Import-Table 'InstallExecuteSequence' @('Action','Condition','Sequence') @('s72','S255','I2') @('Action') $actions
     Import-Table 'InstallUISequence' @('Action','Condition','Sequence') @('s72','S255','I2') @('Action') @(@('FindRelatedProducts',$null,25),@('AppSearch',$null,50),@('LaunchConditions',$null,100),@('CostInitialize',$null,800),@('FileCost',$null,900),@('CostFinalize',$null,1000),@('ExecuteAction',$null,1300))

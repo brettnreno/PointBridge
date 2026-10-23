@@ -1,0 +1,77 @@
+Point Bridge 1.2.8 security upgrade
+
+Pause transfers before an in-place MSI upgrade. Do not uninstall or reset accounts.
+Retain a protected backup of the complete ProgramData/MetasysPointBridge directory,
+including keys. Do not copy another computer's keys or credentials onto this server.
+
+Credential and settings preservation
+- The service remains Automatic under LocalService. It does not require a Windows
+  user to sign in or a browser to remain open. Existing DPAPI machine protection,
+  application name, credential purpose, accounts, ports, and Start/Pause choice
+  are retained. The service SID is enabled before Windows starts the service.
+- A browser may need a fresh sign-in after service restart: human Metasys tokens
+  remain in memory only. This does not erase the account or stop unattended API
+  transfers. Refresh the console with Ctrl+F5 after upgrading.
+- ProgramData permissions now use the service-specific SID, SYSTEM, and local
+  Administrators. An inheritable OWNER RIGHTS entry prevents unrelated processes
+  sharing LocalService from using file ownership to rewrite these permissions.
+- Legacy recovery passwords still verify using their old policy and are rehashed
+  on a successful login. IDs and session stamps are preserved. No password reset
+  is required. Human Metasys sign-in passwords continue not to be stored.
+- Existing any-valid-Metasys-user administrator access is unchanged. For optional
+  approval-only access, verify yourself and each approved user in User accounts,
+  clear Allow every valid local Metasys user, and enable sign-in. This choice is
+  never applied automatically by an upgrade.
+
+External source queries
+- Every URL query is encrypted, not only known API-key parameter names. Public
+  configuration shows __POINTBRIDGE_SAVED_QUERY__ instead of query values. Keep
+  this marker unchanged when saving other edits. Enter the complete URL to replace
+  its query, or remove the query to clear it. Prefer header/bearer authentication.
+- Existing queries are migrated without changing the effective request URL or
+  recovery-journal binding. Application-owned config backups and stale temporary
+  config files are also protected. Corrupt legacy backup text is retained inside
+  a protectedLegacyBackup envelope rather than discarded.
+- Query-bearing settings use schema version 3 so older binaries fail closed
+  instead of silently sending a request without its query. Recovery password
+  hashes also have a versioned policy. Do not downgrade binaries without a matching
+  pre-upgrade backup and a controlled recovery plan. User-retained exports/backups
+  outside the application data directory cannot be retroactively protected by
+  this migration; restrict them and rotate a real URL credential if it was exposed.
+
+Remote access and certificates
+- Remote access remains disabled by default. Existing remote settings are kept.
+- Configure-Https.ps1 -OpenFirewall now requires -AllowedRemoteAddress with explicit
+  management IP addresses or VPN CIDRs. Catch-all scopes are rejected. Existing
+  firewall rules are narrowed only when explicitly reconfigured; the upgrade does
+  not guess your management network or silently disconnect existing clients.
+- The helper grants certificate-key read access to the service SID, not the shared
+  LocalService identity. Pre-existing permissions on a shared Metasys certificate
+  are NOT removed blindly: doing so could break vendor services. Prefer a separate
+  Point Bridge certificate and review any inherited/shared key permissions.
+- Never bypass TLS certificate validation or expose the console directly to the
+  Internet. Windows administrators and a fully compromised host remain trusted.
+
+Other protections
+- Private authentication bodies are capped at 1 MiB with a body-read deadline.
+  COV lines and events have explicit limits. Existing REST/external JSON limits
+  remain in place. Unexpected exceptions return/log controlled metadata rather
+  than arbitrary messages, bodies, tokens, or exception trees.
+- The SDK is pinned by global.json. NuGet dependencies use committed lock files
+  and locked CI restores. First-party
+  GitHub Actions are pinned to verified commit IDs; Dependabot monitors updates.
+  The release workflow generates GitHub artifact attestations before publication.
+- Installers remain unsigned because no Authenticode certificate is available.
+  GitHub attestations are additional provenance, not a Windows publisher signature.
+  Do not describe this as a signed installer or an independent security audit.
+
+Acceptance limits
+The test suite creates only isolated synthetic Windows fixture services. It tests
+legacy DPAPI decryption, local login/hash upgrades, settings, Start and Pause across
+SCM restarts in Session 0, and denial of key/config access, process-memory access,
+and DACL changes from another LocalService process while the target service is
+running. It also inspects MSI upgrade/permanent-data/automatic-start/SID/recovery
+metadata without installing the real product. No customer service or live Metasys
+point is changed. A real MSI upgrade/rollback and a full no-sign-in server reboot
+still require a controlled test VM or customer maintenance window. The GitHub OIDC
+attestation step can only be exercised by a subsequent authorized hosted run.

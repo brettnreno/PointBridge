@@ -6,6 +6,9 @@ int passed = 0;
 async Task Test(string name, Func<Task> action) { try { await action(); Console.WriteLine("PASS " + name); passed++; } catch(Exception e) { Console.WriteLine("FAIL " + name + ": " + e.Message); Environment.ExitCode = 1; } }
 const string id = "32cfddc0-411f-5b9e-9a6d-442cb62fecbb";
 const string stream = "b6d184ee-e137-44aa-b9b1-14bc704cd25d";
+await Test("Security upgrade preserves encrypted credentials, settings and recovery bindings", SecurityScenarios.QueryUpgrade);
+await Test("Bounded COV lines and events with safe error messages", SecurityScenarios.StreamLimits);
+if(args.Contains("--security-only"))return;
 await Test("Unused schema definitions cannot block numeric command validation", SchemaExpansionScenarios.Run);
 if(args.Contains("--schema-only"))return;
 await Test("Shared API sessions and configuration retirement", ApiSessionScenarios.ReuseAndRetirement);

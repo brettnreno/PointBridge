@@ -2,9 +2,11 @@
 
 Point Bridge is a Windows service with a local web console for copying scalar data into Metasys points. It supports Metasys REST API v5/v6 sources and v4/v5/v6 recipients, optional read-only JSON API sources, and multiple recipient servers. Select API v4 for a Metasys 12 destination and API v5 for Metasys 13. The repository branch is **master**.
 
-Current version: **1.2.7 release candidate**. Builds are unsigned. The operator has confirmed successful installation and operation in their Metasys environment, and automated regressions use local/fake endpoints. Verify compatibility and unattended restart behavior at each deployment. Independent Metasys health publishing/notifications remain uncommissioned. This is not a pharmacy safety certification or a replacement for independent monitoring.
+Current version: **1.2.8 security release candidate**. [Download the installer and bundle](https://github.com/brettnreno/PointBridge/releases/tag/v1.2.8-rc.1). Builds are unsigned. Earlier releases have operated successfully in the operator's Metasys environment. This candidate passes automated regressions and isolated Windows-service preservation/restart tests; actual MSI upgrade/rollback and full-server reboot remain unverified. Independent Metasys health publishing/notifications remain uncommissioned. This is not a pharmacy safety certification or a replacement for independent monitoring.
 
 ## Appearance
+
+Security hardening is documented in [security upgrade notes](app/SECURITY-UPGRADE.txt), including retained credentials/settings, unattended startup checks, protected URL queries, optional approved-user access, and deployment acceptance limits. Use the current candidate for new deployments; older tags and commits remain available for traceability, not as recommended downloads. Back up ProgramData, including its keys, before upgrading; pause transfers and install over the existing installation without uninstalling first.
 
 The console uses locally bundled Noto Sans, matching the installed Metasys UI font family. Sign-in always uses the same dark appearance, without theme controls. After sign-in, the sidebar offers Light, Dark, System, and Boomer modes; Dark is the default. System follows your operating-system preference. The Show/Hide menu button collapses the sidebar and expands the workspace. Theme and menu preferences stay in this browser only; they do not change server configuration or transfer behavior. Boomer mode deliberately uses bold Comic Sans and high-saturation colors. The blue/teal angular pinwheel also serves as the browser favicon. Bundled Noto fonts are distributed under the SIL Open Font License in `app/wwwroot/fonts/LICENSE.txt`.
 
@@ -194,7 +196,7 @@ Maintainers publish a candidate by running Actions → Publish release candidate
 
 ### Continuous integration
 
-[.github/workflows/build.yml](.github/workflows/build.yml) runs on pushes to master, pull requests targeting master and manual dispatch. A Windows runner installs .NET10, tests, publishes and authors the MSI. Artifacts are retained30 days; build/synthetic-test logs14 days. Workflow permissions are read-only and no repository secrets are required. It does not deploy, install, activate transfers, connect to customer servers, publish GitHub Releases or use SSH keys.
+[.github/workflows/build.yml](.github/workflows/build.yml) runs on pushes to master, pull requests targeting master and manual dispatch. A Windows runner installs .NET10, tests, publishes and authors the MSI. Artifacts are retained30 days; build/synthetic-test logs14 days. Workflow permissions are read-only and no repository secrets are required. Tests briefly create isolated synthetic Windows services to verify credential/settings upgrades and noninteractive startup, then remove those fixture services. They do not install the real product, activate transfers, connect to customer servers, publish GitHub Releases or use SSH keys.
 
 After a successful run, open Actions -> Build and test Point Bridge -> the run -> Artifacts. Download the Windows package and inspect checksums/instructions. Hosted Actions execution must be verified after the workflow is pushed; local validation alone does not mean GitHub has run it.
 

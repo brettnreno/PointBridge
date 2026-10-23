@@ -5,16 +5,16 @@ public static class Preflight
 {
     public static void CheckInput(Mapping mapping)
     {
-        if(mapping.SourceKind is not("metasys" or "json"))throw new ArgumentException("Choose a supported source kind.");
+        if(mapping.SourceKind is not("metasys" or "json"))throw new UserInputException("Choose a supported source kind.");
         if ((mapping.SourceKind=="metasys" && string.IsNullOrWhiteSpace(mapping.SourceObject)) || (mapping.SourceKind=="json" && string.IsNullOrWhiteSpace(mapping.ExternalSourceId)) || string.IsNullOrWhiteSpace(mapping.DestinationObject))
-            throw new ArgumentException("Both point IDs or references are required.");
+            throw new UserInputException("Both point IDs or references are required.");
         if (mapping.Name.Length > 128 || mapping.SourceObject.Length > 2048 || mapping.DestinationObject.Length > 2048)
-            throw new ArgumentException("Point names are limited to 128 characters and references to 2048 characters.");
+            throw new UserInputException("Point names are limited to 128 characters and references to 2048 characters.");
         if (mapping.SourceAttribute != "presentValue" || mapping.DestinationAttribute != "presentValue")
-            throw new ArgumentException("Mappings transfer the presentValue attribute.");
-        if (mapping.WriteMode is not ("attribute" or "command")) throw new ArgumentException("Choose attribute or command write mode.");
+            throw new UserInputException("Mappings transfer the presentValue attribute.");
+        if (mapping.WriteMode is not ("attribute" or "command")) throw new UserInputException("Choose attribute or command write mode.");
         if (mapping.WriteMode == "attribute" && mapping.CommandPriority != null)
-            throw new ArgumentException("A command priority is available only for a command that declares it.");
+            throw new UserInputException("A command priority is available only for a command that declares it.");
     }
 
     public static async Task<ValidationResult> Validate(Mapping mapping, Api source, Api destination, CancellationToken ct)
@@ -28,7 +28,7 @@ public static class Preflight
                 return new ValidationResult{Errors=["Source and destination must be different server origins."]};
             return await ValidatePoint(mapping,await Describe(source,mapping.SourceObject,false,ct),destination,ct);
         }
-        catch(Exception e)when(e is not OperationCanceledException){return new(){Errors=[e.Message]};}
+        catch(Exception e)when(e is not OperationCanceledException){return new(){Errors=[SafeErrors.Message(e)]};}
     }
     public static async Task<ValidationResult> ValidatePoint(Mapping mapping,PointInfo source,Api destination,CancellationToken ct)
     {
@@ -67,7 +67,7 @@ public static class Preflight
             catch (Exception e) when (e is not OperationCanceledException)
             {
                 if (mapping.WriteMode == "command") throw;
-                result.Warnings.Add("Command discovery unavailable: " + e.Message);
+                result.Warnings.Add("Command discovery unavailable: " + SafeErrors.Message(e));
             }
             if (mapping.WriteMode == "attribute")
             {
@@ -93,7 +93,7 @@ public static class Preflight
             }
             result.Warnings.Add("Validation reads metadata only. Actual writes are verified by destination readback after transfers start.");
         }
-        catch (Exception e) when (e is not OperationCanceledException) { result.Errors.Add(e.Message); }
+        catch (Exception e) when (e is not OperationCanceledException) { result.Errors.Add(SafeErrors.Message(e)); }
         return result;
     }
 

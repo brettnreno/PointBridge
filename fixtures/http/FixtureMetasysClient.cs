@@ -32,6 +32,7 @@ public static class FixtureAuthControl
 {
     public static void MapFixtureAuthControl(this WebApplication app)
     {
+        app.MapGet("/api/fixture/error", (Func<IResult>)(() => throw new InvalidOperationException("fixture-unexpected-secret-canary")));
         app.MapPost("/api/fixture/mode/{mode}", (string mode, HttpContext context) =>
         {
             if (!context.User.IsInRole("Admin")) return Results.StatusCode(403);

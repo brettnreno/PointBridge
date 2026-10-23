@@ -3,9 +3,22 @@ param(
     [Parameter(Mandatory = $true)][string]$CertificateThumbprint,
     [string]$InstallationDirectory = (Join-Path $env:ProgramFiles 'Metasys Point Bridge'),
     [ValidateRange(1024,65535)][int]$Port = 5443,
-    [switch]$OpenFirewall
+    [switch]$OpenFirewall,
+    [string[]]$AllowedRemoteAddress
 )
 $ErrorActionPreference = 'Stop'
+if ($OpenFirewall) {
+    if (!$AllowedRemoteAddress) { throw 'Specify -AllowedRemoteAddress with management IP addresses or VPN subnets before opening the firewall.' }
+    foreach ($address in $AllowedRemoteAddress) {
+        $parts = $address.Split('/')
+        $ip = $null
+        if ($parts.Count -gt 2 -or ![Net.IPAddress]::TryParse($parts[0],[ref]$ip)) { throw 'Use explicit management IP addresses or CIDR subnets; Any and named scopes are not accepted.' }
+        $maximum = if ($ip.AddressFamily -eq [Net.Sockets.AddressFamily]::InterNetwork) { 32 } else { 128 }
+        $prefix = 0
+        if ($parts.Count -eq 2 -and (![int]::TryParse($parts[1],[ref]$prefix) -or $prefix -lt 1 -or $prefix -gt $maximum)) { throw 'Use a restricted CIDR prefix, not a catch-all subnet.' }
+        if ($ip.Equals([Net.IPAddress]::Any) -or $ip.Equals([Net.IPAddress]::IPv6Any)) { throw 'Unspecified firewall addresses are not accepted.' }
+    }
+}
 $principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'Run this configuration script in an elevated PowerShell window.' }
 if ([Uri]::CheckHostName($PublicHost) -eq [UriHostNameType]::Unknown -or $PublicHost.Contains('*')) { throw 'Enter the server DNS name covered by the certificate, without a scheme or port.' }
@@ -19,8 +32,11 @@ try {
     elseif ($rsa -is [Security.Cryptography.RSACryptoServiceProvider]) { $keyPath = Join-Path $env:ProgramData ("Microsoft\Crypto\RSA\MachineKeys\" + $rsa.CspKeyContainerInfo.UniqueKeyContainerName) }
     else { throw 'Private key provider is unsupported by this helper. Grant key read permission using Certificates MMC.' }
     $keyAcl = Get-Acl -LiteralPath $keyPath
-    $serviceIdentity = (Get-CimInstance Win32_Service -Filter "Name='MetasysPointBridge'").StartName
-    if ([string]::IsNullOrWhiteSpace($serviceIdentity)) { throw 'Install the MetasysPointBridge service first.' }
+    $service = Get-CimInstance Win32_Service -Filter "Name='MetasysPointBridge'"
+    if (!$service) { throw 'Install the MetasysPointBridge service first.' }
+    & (Join-Path $env:SystemRoot 'System32\sc.exe') sidtype MetasysPointBridge unrestricted | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Could not enable the service-specific identity.' }
+    $serviceIdentity = ([Security.Principal.NTAccount]::new('NT SERVICE','MetasysPointBridge')).Translate([Security.Principal.SecurityIdentifier])
     $keyAcl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($serviceIdentity,'Read','Allow'))
     Set-Acl -LiteralPath $keyPath -AclObject $keyAcl
 } finally { $rsa.Dispose() }
@@ -36,8 +52,8 @@ Move-Item -LiteralPath ($settingsPath + '.tmp') -Destination $settingsPath -Forc
 if ($OpenFirewall) {
     $ruleName = 'MetasysPointBridge-HTTPS'
     $existing = Get-NetFirewallRule -Name $ruleName -ErrorAction SilentlyContinue
-    if ($existing) { $existing | Get-NetFirewallPortFilter | Set-NetFirewallPortFilter -LocalPort $Port }
-    else { New-NetFirewallRule -Name $ruleName -DisplayName 'Metasys Point Bridge HTTPS' -Direction Inbound -Action Allow -Protocol TCP -LocalPort $Port -Profile Domain,Private | Out-Null }
+    if ($existing) { $existing | Get-NetFirewallPortFilter | Set-NetFirewallPortFilter -LocalPort $Port; $existing | Set-NetFirewallRule -Profile Domain,Private -RemoteAddress $AllowedRemoteAddress }
+    else { New-NetFirewallRule -Name $ruleName -DisplayName 'Metasys Point Bridge HTTPS' -Direction Inbound -Action Allow -Protocol TCP -LocalPort $Port -Profile Domain,Private -RemoteAddress $AllowedRemoteAddress | Out-Null }
 }
 Restart-Service -Name MetasysPointBridge
 Write-Host "HTTPS configured at https://${PublicHost}:$Port/ . Verify certificate trust and DNS from a coworker's browser."

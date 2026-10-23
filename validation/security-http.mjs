@@ -1,0 +1,30 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const origin = 'http://127.0.0.1:15089';
+let cookie = '';
+const session = await (await fetch(origin + '/api/session')).json();
+async function call(path, method = 'GET', body) {
+  const response = await fetch(origin + path, { method, headers: { Cookie: cookie, Origin: origin, 'X-CSRF-Token': session.csrfToken, 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+  for (const value of response.headers.getSetCookie()) if (value.startsWith('MetasysPointBridge.Session=')) cookie = value.split(';')[0];
+  const text = await response.text();
+  assert.ok(!text.includes('fixture-unexpected-secret-canary'));
+  return { status: response.status, text, json: text ? JSON.parse(text) : null };
+}
+assert.equal((await call('/api/auth/login', 'POST', {username: 'fixture-admin', password: 'fixture-admin-password'})).status, 200);
+const rejected = await call('/api/fixture/error');
+assert.equal(rejected.status, 400);
+assert.ok(rejected.json.error.includes('could not be completed'));
+const sourceId = '20000000-0000-4000-8000-000000000001';
+const canary = 'synthetic-url-secret-never-public';
+const source = {name: 'Security fixture', enabled: false, url: 'https://fixture-json.invalid/data?client_secret=' + canary, valuePointer: '/value', timestampPointer: '/at', unitPointer: '/units', inputUnit: 'degC', outputUnit: 'degC', maxAgeSeconds: 60, pollSeconds: 300, timeoutSeconds: 10, authMode: 'none', valueType: 'number'};
+const saved = await call('/api/connections/json/' + sourceId, 'PUT', source);
+assert.equal(saved.status, 200);
+assert.ok(!saved.text.includes(canary) && saved.json.hasProtectedQuery);
+assert.ok(!JSON.stringify((await call('/api/state')).json).includes(canary));
+assert.ok(!fs.readFileSync(process.env.BRIDGE_TEST_DATA + '/config.json', 'utf8').includes(canary));
+assert.equal((await call('/api/connections/json/' + sourceId, 'PUT', saved.json)).status, 200);
+const settings = (await call('/api/auth/metasys/settings')).json;
+assert.equal((await call('/api/auth/metasys/settings', 'PUT', {serverOrigin: settings.serverOrigin, enabled: true, allowAnyAuthenticatedUser: false})).status, 200);
+assert.equal((await call('/api/auth/metasys/settings')).json.allowAnyAuthenticatedUser, false);
+assert.equal((await call('/api/auth/metasys/settings', 'PUT', {serverOrigin: settings.serverOrigin, enabled: settings.enabled, allowAnyAuthenticatedUser: settings.allowAnyAuthenticatedUser})).status, 200);
+console.log('PASS HTTP security: protected query round-trip, no secret/state leakage, safe unexpected errors, optional strict approval.');

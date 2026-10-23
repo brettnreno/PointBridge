@@ -18,7 +18,7 @@ if (Microsoft.Extensions.Hosting.WindowsServices.WindowsServiceHelpers.IsWindows
     builder.Logging.AddEventLog(o => { if (OperatingSystem.IsWindows()) o.SourceName = "MetasysPointBridge"; });
 
 var folder = Environment.GetEnvironmentVariable("METASYS_BRIDGE_DATA") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "MetasysPointBridge");
-SecureDirectory(folder);
+ServiceSecurity.SecureDirectory(folder, Microsoft.Extensions.Hosting.WindowsServices.WindowsServiceHelpers.IsWindowsService());
 builder.Configuration.AddJsonFile(Path.Combine(folder, "websettings.json"), optional: true, reloadOnChange: false);
 builder.Services.AddDataProtection().SetApplicationName("MetasysPointBridge")
     .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(folder, "keys"))).ProtectKeysWithDpapi(true);
@@ -125,11 +125,11 @@ app.Use(async (context, next) =>
     if (context.Request.Path.StartsWithSegments("/api")) context.Response.Headers.CacheControl = "no-store";
     try { await next(); }
     catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested) { }
-    catch (UnauthorizedAccessException exception) { context.Response.StatusCode = 403; await context.Response.WriteAsJsonAsync(new { error = exception.Message }); }
+    catch (UnauthorizedAccessException) { context.Response.StatusCode = 403; await context.Response.WriteAsJsonAsync(new { error = "Access denied or sign-in temporarily unavailable. Check permissions and try again later." }); }
     catch (Exception exception)
     {
-        app.Logger.LogWarning(exception, "Request failed: {Method} {Path}", context.Request.Method, context.Request.Path);
-        if (!context.Response.HasStarted) { context.Response.StatusCode = 400; await context.Response.WriteAsJsonAsync(new { error = exception.Message }); }
+        app.Logger.LogWarning("Request failed: {Method}; category={Category}; trace={Trace}", context.Request.Method, exception.GetType().Name, context.TraceIdentifier);
+        if (!context.Response.HasStarted) { context.Response.StatusCode = 400; await context.Response.WriteAsJsonAsync(new { error = SafeErrors.Message(exception) }); }
     }
 });
 app.UseRateLimiter();
@@ -191,16 +191,6 @@ app.MapBridgeEndpoints();
 app.MapFixtureAuthControl();
 #endif
 app.Run();
-
-static void SecureDirectory(string path)
-{
-    var directory = Directory.CreateDirectory(path);
-    var permissions = new DirectorySecurity();
-    permissions.SetAccessRuleProtection(true, false);
-    foreach (var sid in new[] { WindowsIdentity.GetCurrent().User!, new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null), new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null) }.Distinct())
-        permissions.AddAccessRule(new FileSystemAccessRule(sid, FileSystemRights.FullControl, InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow));
-    directory.SetAccessControl(permissions);
-}
 
 static string FindContentRoot(string[] arguments)
 {

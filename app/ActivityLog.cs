@@ -36,8 +36,8 @@ public sealed class ActivityLog
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             {
-                Entries.Enqueue(new AuditEntry(DateTimeOffset.Now, "error", "Persistent activity log unavailable: " + error.Message));
-                Console.Error.WriteLine("Persistent activity log unavailable: " + error.Message);
+                Entries.Enqueue(new AuditEntry(DateTimeOffset.Now, "error", "Persistent activity log unavailable. Check data-directory permissions and free space."));
+                Console.Error.WriteLine("Persistent activity log unavailable; category=" + error.GetType().Name);
             }
             Entries.Enqueue(entry);
             while (Entries.Count > 200) Entries.TryDequeue(out _);

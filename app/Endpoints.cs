@@ -64,7 +64,7 @@ public static class Endpoints
 
         app.MapGet("/api/objects/{side}", async (string side, string? parentId, Store store, CancellationToken ct) =>
         {
-            if (parentId != null && !Guid.TryParse(parentId, out _)) throw new ArgumentException("Parent must be a Metasys object GUID.");
+            if (parentId != null && !Guid.TryParse(parentId, out _)) throw new UserInputException("Parent must be a Metasys object GUID.");
             using var client = store.Client(side);
             return await client.Get(parentId == null ? "objects?depth=1&flatten=true" : $"objects/{parentId}/objects?depth=1&flatten=true", ct);
         });
@@ -104,12 +104,12 @@ public static class Endpoints
         });
         app.MapPut("/api/connections/extensions",async(ExtensionRequest request,Store store,Bridge bridge)=>
         {
-            await bridge.Configure(()=>store.Update(next=>{next.SchemaVersion=2;next.ExtendedSourcesEnabled=request.Enabled;}));
+            await bridge.Configure(()=>store.Update(next=>{next.SchemaVersion=Math.Max(next.SchemaVersion,2);next.ExtendedSourcesEnabled=request.Enabled;}));
             return new{enabled=store.Config.ExtendedSourcesEnabled};
         });
         app.MapDelete("/api/connections/recipients/{id}",async(string id,Store store,Bridge bridge)=>
         {
-            if(store.Config.Mappings.Any(m=>m.DestinationConnectionId==id))throw new ArgumentException("Remove mappings using this recipient first.");
+            if(store.Config.Mappings.Any(m=>m.DestinationConnectionId==id))throw new UserInputException("Remove mappings using this recipient first.");
             await bridge.Configure(()=>store.Update(next=>next.Destinations.Remove(id)));return new{success=true};
         });
         app.MapPut("/api/connections/json/{id}",async(string id,ExternalJsonSource input,Store store,Bridge bridge)=>
@@ -128,7 +128,7 @@ public static class Endpoints
         });
         app.MapDelete("/api/connections/json/{id}",async(string id,Store store,Bridge bridge)=>
         {
-            if(store.Config.Mappings.Any(m=>m.SourceKind=="json"&&m.ExternalSourceId==id))throw new ArgumentException("Remove mappings using this source first.");
+            if(store.Config.Mappings.Any(m=>m.SourceKind=="json"&&m.ExternalSourceId==id))throw new UserInputException("Remove mappings using this source first.");
             await bridge.Configure(()=>store.Update(next=>next.ExternalSources.Remove(id)));return new{success=true};
         });
 
@@ -149,7 +149,7 @@ public static class Endpoints
             Preflight.CheckInput(mapping);
             await bridge.Configure(async () =>
             {
-                if (!store.Config.Mappings.Any(x => x.Id == id)) throw new ArgumentException("Mapping not found.");
+                if (!store.Config.Mappings.Any(x => x.Id == id)) throw new UserInputException("Mapping not found.");
                 mapping.Id = id;
                 await ValidateLive(mapping, store, ct);
                 await store.Update(next => next.Mappings[next.Mappings.FindIndex(x => x.Id == id)] = mapping);
@@ -176,14 +176,14 @@ public static class Endpoints
     {
         using var destination=store.Client(Store.DestinationSide(mapping));
         var validation = await store.ValidateMapping(mapping,ct);
-        if (!validation.Valid) throw new ArgumentException(string.Join(" ", validation.Errors));
+        if (!validation.Valid) throw new UserInputException(string.Join(" ", validation.Errors));
         if (mapping.Enabled)
         {
             foreach (var existing in store.Config.Mappings.Where(x => x.Enabled && x.Id != mapping.Id))
             {
                 if(!string.Equals(store.Get(Store.DestinationSide(existing)).BaseUrl.TrimEnd('/'),store.Get(Store.DestinationSide(mapping)).BaseUrl.TrimEnd('/'),StringComparison.OrdinalIgnoreCase))continue;
                 var existingId = await destination.Resolve(existing.DestinationObject, ct);
-                if (existingId == validation.Destination!.Id) throw new ArgumentException("Another enabled mapping already targets this destination point.");
+                if (existingId == validation.Destination!.Id) throw new UserInputException("Another enabled mapping already targets this destination point.");
             }
         }
         mapping.SourceValue = null;
@@ -196,9 +196,9 @@ public static class Endpoints
     {
         if (!Uri.TryCreate(input.BaseUrl, UriKind.Absolute, out var uri) || uri.Scheme != "https" || uri.AbsolutePath != "/"
             || uri.UserInfo != "" || uri.Query != "" || uri.Fragment != "")
-            throw new ArgumentException("Enter an HTTPS server origin, e.g. https://adx.example.com");
+            throw new UserInputException("Enter an HTTPS server origin, e.g. https://adx.example.com");
         if (input.ApiVersion is not ("v5" or "v6") && !(input.ApiVersion == "v4" && side != "source"))
-            throw new ArgumentException("Choose API v5 or v6 for a source, or v4, v5 or v6 for a destination.");
-        if (string.IsNullOrWhiteSpace(input.Username)) throw new ArgumentException("Enter the Metasys account username.");
+            throw new UserInputException("Choose API v5 or v6 for a source, or v4, v5 or v6 for a destination.");
+        if (string.IsNullOrWhiteSpace(input.Username)) throw new UserInputException("Enter the Metasys account username.");
     }
 }

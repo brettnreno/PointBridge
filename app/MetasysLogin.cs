@@ -138,7 +138,11 @@ public sealed class MetasysUiClient : IMetasysUiClient, IDisposable
         // The verified PowerShell client accepts JSON independently of the media-type header.
         // Decode using the declared charset, then require valid JSON and the operation's exact shape.
         // No response text is logged or returned to the browser.
-        var json = await response.Content.ReadAsStringAsync(ct);
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        deadline.CancelAfter(TimeSpan.FromSeconds(20));
+        try { await response.Content.LoadIntoBufferAsync(1024 * 1024, deadline.Token); }
+        catch (HttpRequestException) { throw new MetasysContractException("response-too-large"); }
+        var json = await response.Content.ReadAsStringAsync(deadline.Token);
         return JsonDocument.Parse(json, new JsonDocumentOptions { MaxDepth = 24 });
     }
     private static UiLogin LoginBody(JsonElement body) => new(
@@ -197,7 +201,7 @@ public sealed class MetasysSessions : BackgroundService
     {
         var username = request.Username?.Trim() ?? "";
         var origin = CurrentOrigin;
-        if (!Available || string.IsNullOrEmpty(request.Password) ||
+        if (!Available || string.IsNullOrEmpty(request.Password) || request.Password.Length > 256 || username.Length is < 1 or > 256 || username.Any(char.IsControl) ||
             origin is null || (!options.CurrentValue.AllowAnyAuthenticatedUser && !(options.CurrentValue.Grants ?? []).Any(g => ValidGrant(g) && MetasysOrigin.Normalize(g.ServerOrigin) == origin && SameName(g.Username, username)))) return new(null, "account-not-granted");
         string? token = null;
         var stage = "login";

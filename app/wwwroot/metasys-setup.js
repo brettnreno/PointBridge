@@ -12,6 +12,11 @@ document.body.insertAdjacentHTML('beforeend', `<dialog id="metasys-setup-dialog"
 <form id="metasys-verify-form"><label>Metasys username<input id="metasys-verify-user" required autocomplete="username"></label><label>Metasys password<input id="metasys-verify-password" type="password" required autocomplete="off"></label><button class="secondary">Verify login</button></form>
 <p>3. Enable sign-in for all valid users on this Metasys server. Each receives administrator access.</p><button id="enable-metasys-login" class="primary">Enable Metasys sign-in</button> <button id="disable-metasys-login" class="secondary">Disable Metasys sign-in</button><p id="metasys-setup-status" role="status"></p></dialog>`);
 const setupElement = id => document.getElementById(id);
+setupElement('enable-metasys-login').insertAdjacentHTML('beforebegin', '<label class="check-label"><input id="metasys-allow-any" type="checkbox" checked> Allow every valid local Metasys user to administer Point Bridge</label><p class="form-note">Optional stricter access: clear this checkbox, verify each approved user above, then select Enable Metasys sign-in. Existing access is unchanged until saved.</p><p id="metasys-approved-users" class="form-note"></p>');
+function renderMetasysAccess(settings) {
+    setupElement('metasys-allow-any').checked = settings.allowAnyAuthenticatedUser !== false;
+    setupElement('metasys-approved-users').textContent = 'Verified users: ' + ((settings.users || []).map(user => user.username).join(', ') || 'None');
+}
 function updateSetupScreen() {
     if (!sessionState) return;
     const firstRun = sessionState.setupRequired && !localRecovery;
@@ -31,6 +36,7 @@ function updateSetupScreen() {
 async function openMetasysSetup() {
     try {
         const settings = await api(loginSettingsPath);
+        renderMetasysAccess(settings);
         setupElement('metasys-server').value = settings.serverOrigin || '';
         setupElement('metasys-setup-status').textContent = settings.enabled ? 'Metasys sign-in is enabled.' : 'Metasys sign-in is not enabled. Complete these steps to use Metasys accounts.';
         setupElement('metasys-setup-dialog').showModal();
@@ -46,7 +52,7 @@ setupElement('close-metasys-setup').addEventListener('click', () => { setupEleme
 setupElement('metasys-server-form').addEventListener('submit', event => {
     event.preventDefault();
     setupOperation(event.submitter, async () => {
-        await api(loginSettingsPath, 'PUT', {serverOrigin: setupElement('metasys-server').value.trim(), enabled: false, allowAnyAuthenticatedUser: true});
+        renderMetasysAccess(await api(loginSettingsPath, 'PUT', {serverOrigin: setupElement('metasys-server').value.trim(), enabled: false, allowAnyAuthenticatedUser: setupElement('metasys-allow-any').checked}));
         setupElement('metasys-setup-status').textContent = 'Server saved. Verify a Metasys login next.';
     });
 });
@@ -55,12 +61,12 @@ setupElement('metasys-verify-form').addEventListener('submit', event => {
     const password = setupElement('metasys-verify-password').value;
     setupElement('metasys-verify-password').value = '';
     setupOperation(event.submitter, async () => {
-        await api(loginSettingsPath + '/users', 'POST', {serverOrigin: setupElement('metasys-server').value.trim(), username: setupElement('metasys-verify-user').value.trim(), password});
+        renderMetasysAccess(await api(loginSettingsPath + '/users', 'POST', {serverOrigin: setupElement('metasys-server').value.trim(), username: setupElement('metasys-verify-user').value.trim(), password}));
         setupElement('metasys-setup-status').textContent = 'Metasys login verified. Enable sign-in to finish.';
     });
 });
 for (const enabled of [true, false]) setupElement(enabled ? 'enable-metasys-login' : 'disable-metasys-login').addEventListener('click', event => setupOperation(event.target, async () => {
-    await api(loginSettingsPath, 'PUT', {serverOrigin: setupElement('metasys-server').value.trim(), enabled, allowAnyAuthenticatedUser: true});
+    renderMetasysAccess(await api(loginSettingsPath, 'PUT', {serverOrigin: setupElement('metasys-server').value.trim(), enabled, allowAnyAuthenticatedUser: setupElement('metasys-allow-any').checked}));
     setupElement('metasys-setup-status').textContent = enabled ? 'Enabled. Sign out, then use your Metasys username and password.' : 'Metasys sign-in disabled. Local recovery accounts remain available.';
 }));
 new MutationObserver(updateSetupScreen).observe(setupElement('auth-screen'), {attributes: true, attributeFilter: ['hidden']});

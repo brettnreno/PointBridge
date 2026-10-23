@@ -26,17 +26,17 @@ jobs:
       run:
         shell: pwsh
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
         with:
-          dotnet-version: '10.0.x'
+          global-json-file: global.json
       - name: Build, run fake-only regressions, and package Windows x64 MSI
         run: ./scripts/Build.ps1
       - name: Upload unsigned installer and complete-removal helper
         if: success()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: PointBridge-windows-x64-${{ github.run_number }}
           path: artifacts/packages/*
@@ -44,7 +44,7 @@ jobs:
           retention-days: 30
       - name: Upload build and synthetic-test logs
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: PointBridge-test-logs-${{ github.run_number }}
           path: artifacts/logs/*

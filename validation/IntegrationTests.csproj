@@ -8,6 +8,8 @@
     <Compile Remove="GeneratedBackend.cs" />
     <Compile Include="../app/Models.cs" Link="Production/Models.cs" />
     <Compile Include="../app/Store.cs" Link="Production/Store.cs" />
+    <Compile Include="../app/SecurityPolicy.cs" Link="Production/SecurityPolicy.cs" />
+    <Compile Include="../app/ServiceSecurity.cs" Link="Production/ServiceSecurity.cs" />
     <Compile Include="../app/Api.cs" Link="Production/Api.cs" />
     <Compile Include="../app/MetasysExplorer.cs" Link="Production/MetasysExplorer.cs" />
     <Compile Include="../app/Bridge.cs" Link="Production/Bridge.cs" />

@@ -39,7 +39,7 @@ if($service){
     Stop-Service -Name $serviceName -ErrorAction Stop
     (Get-Service -Name $serviceName).WaitForStatus('Stopped',[TimeSpan]::FromSeconds(60))
 }
-foreach($version in @('1.2.5','1.2.4','1.2.3','1.2.2','1.2.1','1.2.0','1.1.1','1.1.0','1.0.0')){
+foreach($version in @('1.2.8','1.2.7','1.2.6','1.2.5','1.2.4','1.2.3','1.2.2','1.2.1','1.2.0','1.1.1','1.1.0','1.0.0')){
     $code=Product-Code $version
     $key='Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\'+$code
     if(Test-Path -LiteralPath $key){

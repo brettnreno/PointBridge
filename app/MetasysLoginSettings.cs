@@ -22,7 +22,7 @@ public static class LocalMetasysServer
             if (addresses.Length > 0 && addresses.All(address => System.Net.IPAddress.IsLoopback(address) || local.Contains(address))) return origin;
         }
         catch { }
-        throw new ArgumentException("Use the trusted HTTPS address of Metasys installed on this computer.");
+        throw new UserInputException("Use the trusted HTTPS address of Metasys installed on this computer.");
     }
 }
 
@@ -52,7 +52,7 @@ public sealed class MetasysLoginSettings : IOptionsMonitor<MetasysLoginOptions>
         lock (gate)
         {
             var grants = MetasysOrigin.Normalize(current.ServerOrigin) == origin ? current.Grants : [];
-            if (request.Enabled && grants.Length == 0) throw new ArgumentException("Verify a Metasys login on this server before enabling sign-in.");
+            if (request.Enabled && grants.Length == 0) throw new UserInputException("Verify a Metasys login on this server before enabling sign-in.");
             Save(new() { ServerOrigin = origin, Enabled = request.Enabled, AllowAnyAuthenticatedUser = request.AllowAnyAuthenticatedUser, Grants = grants, SessionMinutes = current.SessionMinutes });
         }
     }
@@ -61,28 +61,28 @@ public sealed class MetasysLoginSettings : IOptionsMonitor<MetasysLoginOptions>
     {
         var origin = LocalMetasysServer.Required(request.ServerOrigin);
         var expected = CurrentValue;
-        if (origin != MetasysOrigin.Normalize(expected.ServerOrigin)) throw new ArgumentException("Save this server before approving users.");
+        if (origin != MetasysOrigin.Normalize(expected.ServerOrigin)) throw new UserInputException("Save this server before approving users.");
         var username = request.Username?.Trim() ?? "";
         if (username.Length is < 1 or > 256 || username.Any(char.IsControl) || string.IsNullOrEmpty(request.Password) || request.Password.Length > 256)
-            throw new ArgumentException("Enter the Metasys username and password to verify this user.");
+            throw new UserInputException("Enter the Metasys username and password to verify this user.");
         string? token = null;
         var stage = "login";
         try
         {
             var login = await client.LoginAsync(origin, username, request.Password, cancellationToken);
             token = login.Token;
-            if (!login.Authenticated || string.IsNullOrWhiteSpace(token)) throw new ArgumentException("Metasys did not accept the login. Diagnostic: metasys-login-rejected. No user was approved.");
-            if (!login.TermsAccepted) throw new ArgumentException("Accept the terms in Metasys first, then verify this user again.");
+            if (!login.Authenticated || string.IsNullOrWhiteSpace(token)) throw new UserInputException("Metasys did not accept the login. Diagnostic: metasys-login-rejected. No user was approved.");
+            if (!login.TermsAccepted) throw new UserInputException("Accept the terms in Metasys first, then verify this user again.");
             stage = "identity";
             var identity = await client.IdentityAsync(origin, token, cancellationToken);
             stage = "identity-validation";
             MetasysSessions.Check(login, identity, username);
             lock (gate)
             {
-                if (!ReferenceEquals(expected, current)) throw new ArgumentException("Settings changed during verification. Verify this user again.");
+                if (!ReferenceEquals(expected, current)) throw new UserInputException("Settings changed during verification. Verify this user again.");
                 var grant = new MetasysLoginGrant { ServerOrigin = origin, Username = identity.Username, StorageId = login.StorageId, ProfileId = identity.ProfileId, Role = "Admin" };
                 var grants = current.Grants.Where(item => !string.Equals(item.Username, identity.Username, StringComparison.OrdinalIgnoreCase)).Append(grant).ToArray();
-                if (grants.Length > 100) throw new ArgumentException("At most 100 Metasys users can be approved.");
+                if (grants.Length > 100) throw new UserInputException("At most 100 Metasys users can be approved.");
                 Save(new() { ServerOrigin = origin, Enabled = current.Enabled, AllowAnyAuthenticatedUser = current.AllowAnyAuthenticatedUser, Grants = grants, SessionMinutes = current.SessionMinutes });
             }
         }
@@ -96,7 +96,7 @@ public sealed class MetasysLoginSettings : IOptionsMonitor<MetasysLoginOptions>
             else if (stage == "identity-validation") code = "metasys-identity-rejected";
             for (Exception? inner = exception; inner is not null; inner = inner.InnerException)
                 if (inner is System.Security.Authentication.AuthenticationException) { code = "metasys-tls-failed"; break; }
-            throw new ArgumentException("Metasys user verification failed. Diagnostic: " + code + ". Check credentials, account status, HTTPS trust and server compatibility. No user was approved.");
+            throw new UserInputException("Metasys user verification failed. Diagnostic: " + code + ". Check credentials, account status, HTTPS trust and server compatibility. No user was approved.");
         }
         finally { if (!string.IsNullOrEmpty(token)) { try { await client.LogoutAsync(origin, token); } catch { } } }
     }
@@ -123,7 +123,7 @@ public sealed class MetasysLoginSettings : IOptionsMonitor<MetasysLoginOptions>
             File.Move(temporary, file, true);
             Volatile.Write(ref current, next);
         }
-        catch { throw new ArgumentException("Could not save Metasys login settings. The previous settings remain active."); }
+        catch { throw new UserInputException("Could not save Metasys login settings. The previous settings remain active."); }
     }
 }
 
@@ -152,7 +152,7 @@ public static class MetasysLoginSetupEndpoints
         group.MapPut("", (MetasysServerRequest request, MetasysLoginSettings settings, UserStore users) =>
         {
             if (settings.CurrentValue.Enabled && !request.Enabled && !users.HasEnabledAdministrator)
-                throw new ArgumentException("Create a local recovery administrator under User accounts before disabling Metasys sign-in or changing servers.");
+                throw new UserInputException("Create a local recovery administrator under User accounts before disabling Metasys sign-in or changing servers.");
             settings.SaveServer(request);
             return settings.Public();
         });

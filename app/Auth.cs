@@ -12,6 +12,8 @@ public sealed class BridgeUser
     public bool Enabled { get; set; } = true;
     public string Salt { get; set; } = "";
     public string PasswordHash { get; set; } = "";
+    public int PasswordVersion { get; set; }
+    public int PasswordIterations { get; set; }
     public string Stamp { get; set; } = Guid.NewGuid().ToString("N");
 }
 
@@ -22,7 +24,8 @@ public record UpdateUserRequest(string Role, bool Enabled, string? Password);
 
 public sealed class UserStore
 {
-    private const int Iterations = 210_000;
+    private const int LegacyIterations = 210_000;
+    private const int Iterations = 220_000;
     private readonly object gate = new();
     private readonly string file;
     private readonly string setupFile;
@@ -88,6 +91,7 @@ public sealed class UserStore
 
     public BridgeUser? Authenticate(LoginRequest request, string remote)
     {
+        if (request.Password is null || request.Password.Length > 256 || request.Username is null || request.Username.Length > 80) return null;
         lock (gate)
         {
             var key = remote + ":" + (request.Username ?? "").ToUpperInvariant();
@@ -96,14 +100,27 @@ public sealed class UserStore
             var user = users.Find(u => string.Equals(u.Username, request.Username, StringComparison.OrdinalIgnoreCase));
             // A dummy KDF prevents a cheap username-existence timing test.
             var salt = user == null ? new byte[32] : Convert.FromBase64String(user.Salt);
-            var hash = Derive(request.Password ?? "", salt);
+            var iterations = user is null || user.PasswordVersion == 0 ? LegacyIterations : user.PasswordIterations;
+            if (user is not null && (user.PasswordVersion is < 0 or > 1 || iterations is < LegacyIterations or > 2_000_000)) return null;
+            var hash = Derive(request.Password ?? "", salt, iterations);
             var valid = user is { Enabled: true } && CryptographicOperations.FixedTimeEquals(hash, Convert.FromBase64String(user.PasswordHash));
-            if (valid) { failures.Remove(key); return user; }
+            if (valid)
+            {
+                if (user!.PasswordVersion == 0 || user.PasswordIterations < Iterations)
+                {
+                    var previous = (user.Salt, user.PasswordHash, user.PasswordVersion, user.PasswordIterations);
+                    SetPassword(user, request.Password!);
+                    try { Save(); }
+                    catch { (user.Salt, user.PasswordHash, user.PasswordVersion, user.PasswordIterations) = previous; throw new UserInputException("Could not update recovery-account protection. Check data-directory permissions and free space."); }
+                }
+                failures.Remove(key);
+                return user;
+            }
             var count = failure.Until > DateTimeOffset.UtcNow ? failure.Count + 1 : 1;
-            failures[key] = (count, DateTimeOffset.UtcNow.AddMinutes(15));
             // Bound attacker-controlled username entries.
-            if (failures.Count > 2000)
+            if (failures.Count >= 2000)
                 foreach (var expired in failures.Where(x => x.Value.Until <= DateTimeOffset.UtcNow).Select(x => x.Key).ToArray()) failures.Remove(expired);
+            if (failures.Count < 2000 || failures.ContainsKey(key)) failures[key] = (count, DateTimeOffset.UtcNow.AddMinutes(15));
             return null;
         }
     }
@@ -128,7 +145,7 @@ public sealed class UserStore
         lock (gate)
         {
             if (users.Any(u => string.Equals(u.Username, request.Username?.Trim(), StringComparison.OrdinalIgnoreCase)))
-                throw new ArgumentException("That username already exists.");
+                throw new UserInputException("That username already exists.");
             var user = BuildUser(request.Username, request.Password, request.Role);
             users.Add(user);
             try { Save(); } catch { users.Remove(user); throw; }
@@ -141,9 +158,9 @@ public sealed class UserStore
         lock (gate)
         {
             ValidateRole(request.Role);
-            var user = users.Find(u => u.Id == id) ?? throw new ArgumentException("User not found.");
+            var user = users.Find(u => u.Id == id) ?? throw new UserInputException("User not found.");
             if (user.Enabled && user.Role == "Admin" && !request.Enabled && users.Count(u => u.Enabled && u.Role == "Admin") == 1)
-                throw new ArgumentException("Keep at least one enabled administrator.");
+                throw new UserInputException("Keep at least one enabled administrator.");
             var copy = JsonSerializer.Deserialize<BridgeUser>(JsonSerializer.Serialize(user))!;
             user.Role = "Admin";
             user.Enabled = request.Enabled;
@@ -164,7 +181,7 @@ public sealed class UserStore
     {
         ValidateRole(role);
         username = username?.Trim() ?? "";
-        if (username.Length is < 3 or > 80 || username.Any(c => char.IsControl(c))) throw new ArgumentException("Use a username with 3–80 characters.");
+        if (username.Length is < 3 or > 80 || username.Any(c => char.IsControl(c))) throw new UserInputException("Use a username with 3–80 characters.");
         var user = new BridgeUser { Username = username, Role = "Admin" };
         SetPassword(user, password);
         return user;
@@ -172,18 +189,20 @@ public sealed class UserStore
 
     private static void ValidateRole(string role)
     {
-        if (role is not ("Admin" or "Operator")) throw new ArgumentException("Role must be Admin or Operator.");
+        if (role is not ("Admin" or "Operator")) throw new UserInputException("Role must be Admin or Operator.");
     }
 
     private static void SetPassword(BridgeUser user, string password)
     {
-        if (password == null || password.Length is < 12 or > 256) throw new ArgumentException("Use a password with 12–256 characters.");
+        if (password == null || password.Length is < 12 or > 256) throw new UserInputException("Use a password with 12–256 characters.");
         var salt = RandomNumberGenerator.GetBytes(32);
         user.Salt = Convert.ToBase64String(salt);
-        user.PasswordHash = Convert.ToBase64String(Derive(password, salt));
+        user.PasswordHash = Convert.ToBase64String(Derive(password, salt, Iterations));
+        user.PasswordVersion = 1;
+        user.PasswordIterations = Iterations;
     }
 
-    private static byte[] Derive(string password, byte[] salt) => Rfc2898DeriveBytes.Pbkdf2(password, salt, Iterations, HashAlgorithmName.SHA512, 32);
+    private static byte[] Derive(string password, byte[] salt, int iterations) => Rfc2898DeriveBytes.Pbkdf2(password, salt, iterations, HashAlgorithmName.SHA512, 32);
 }
 
 public static class AuthEndpoints

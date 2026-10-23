@@ -21,12 +21,14 @@ public sealed class ExternalJsonSource
     public string AuthMode { get; set; } = "none";
     public string AuthHeader { get; set; } = "";
     public string Secret { get; set; } = "";
+    public string ProtectedQuery { get; set; } = "";
     public string QualityPointer { get; set; } = "";
     public string ReliableQualityValue { get; set; } = "";
 }
 public sealed record ExternalSample(JsonNode Value, string Units, string Type, DateTimeOffset ObservedAt, DateTimeOffset FetchedAt, bool QualityReported);
-public sealed class ExternalSourceException(string code, int? httpStatus = null) : Exception(code)
+public sealed class ExternalSourceException(string code, int? httpStatus = null) : Exception(code), ISafeError
 {
+    public string SafeMessage => "External source could not be read safely. Review source health and authentication settings.";
     public string Code { get; } = code;
     public int? HttpStatus { get; } = httpStatus;
 }
@@ -52,23 +54,21 @@ public sealed class ExternalJsonSession : IDisposable
     public static void Validate(ExternalJsonSource c)
     {
         if(!Uri.TryCreate(c.Url,UriKind.Absolute,out var url)||url.Scheme!="https"||url.UserInfo!=""||url.Fragment!="")
-            throw new ArgumentException("External source requires an HTTPS data URL without embedded credentials or fragments.");
-        if(url.Query.TrimStart('?').Split('&').Any(p=>new[]{"key","apikey","api_key","token","access_token","password","secret","authorization"}.Contains(Uri.UnescapeDataString(p.Split('=')[0]).ToLowerInvariant())))
-            throw new ArgumentException("Put API credentials in the encrypted secret field, never URL query parameters.");
+            throw new UserInputException("External source requires an HTTPS data URL without embedded credentials or fragments.");
         if(c.Url.Length>2048||c.Name.Length>128||c.ValuePointer.Length>512||c.TimestampPointer.Length>512||
             !c.ValuePointer.StartsWith('/')||!c.TimestampPointer.StartsWith('/')||!c.UnitPointer.StartsWith('/'))
-            throw new ArgumentException("Configure JSON Pointer paths for value, timestamp and units.");
+            throw new UserInputException("Configure JSON Pointer paths for value, timestamp and units.");
         if(c.InputUnit.Length==0||c.OutputUnit.Length==0||c.InputUnit.Length>128||c.OutputUnit.Length>128||
             (c.InputUnit!=c.OutputUnit&&!c.UnitAliasConfirmed))
-            throw new ArgumentException("Declare units; different unit labels require explicit same-scale alias confirmation. No conversion is performed.");
+            throw new UserInputException("Declare units; different unit labels require explicit same-scale alias confirmation. No conversion is performed.");
         if(c.PollSeconds is <15 or >86400||c.MaxAgeSeconds is <1 or >604800||c.TimeoutSeconds is <1 or >30||c.ValueType is not("number" or "integer" or "boolean" or "string"))
-            throw new ArgumentException("Choose a poll interval15-86400s, positive maximum observation age, timeout1-30s and scalar type.");
+            throw new UserInputException("Choose a poll interval15-86400s, positive maximum observation age, timeout1-30s and scalar type.");
         if(c.AuthMode is not("none" or "header" or "bearer")||c.UserAgent.Length>256||c.UserAgent.Any(char.IsControl)||
             c.AuthHeader.Any(ch=>!char.IsAsciiLetterOrDigit(ch)&&ch!='-')||c.AuthHeader.Length>64||
             (c.AuthMode=="header"&&(c.AuthHeader.Length==0||new[]{"authorization","cookie","host","connection","content-length","proxy-authorization"}.Contains(c.AuthHeader.ToLowerInvariant()))))
-            throw new ArgumentException("Invalid external API authentication/header configuration.");
+            throw new UserInputException("Invalid external API authentication/header configuration.");
         if(c.QualityPointer.Length>0&&(!c.QualityPointer.StartsWith('/')||c.ReliableQualityValue.Length==0))
-            throw new ArgumentException("Quality checks require a JSON Pointer and explicit reliable value.");
+            throw new UserInputException("Quality checks require a JSON Pointer and explicit reliable value.");
     }
     static JsonNode? Select(JsonNode? root,string pointer)
     {

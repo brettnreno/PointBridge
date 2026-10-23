@@ -17,6 +17,8 @@ if (-not [System.Diagnostics.EventLog]::SourceExists('MetasysPointBridge')) {
 New-Service -Name $ServiceName -DisplayName 'Metasys Point Bridge' -BinaryPathName ('"' + $resolvedExecutable + '"') -StartupType Automatic -Description 'Synchronizes configured Metasys points through the REST API; local administration at http://127.0.0.1:5088.'
 & sc.exe config $ServiceName obj= "NT SERVICE\$ServiceName"
 if ($LASTEXITCODE -ne 0) { throw 'Service installed, but virtual service account configuration failed. Do not start until its identity is configured.' }
+& sc.exe sidtype $ServiceName unrestricted
+if ($LASTEXITCODE -ne 0) { throw 'Service installed, but service SID configuration failed.' }
 $dataDirectory = Join-Path $env:ProgramData 'MetasysPointBridge'
 New-Item -ItemType Directory -Path $dataDirectory -Force | Out-Null
 $acl = Get-Acl -LiteralPath $dataDirectory

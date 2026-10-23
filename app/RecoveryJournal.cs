@@ -4,7 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 
 public sealed record DeliveryRecord(string Binding, string ValueHash, string Phase, string Operation, DateTimeOffset At,DateTimeOffset? SourceObservedAt=null);
-public sealed class JournalException(string code) : Exception(code) { public string Code { get; }=code; }
+public sealed class JournalException(string code) : Exception(code), ISafeError { public string Code { get; }=code; public string SafeMessage => "Recovery journal requires attention before transfers can continue."; }
 
 // One bounded current record per mapping, not a transfer history. No values or credentials.
 public sealed class RecoveryJournal : IDisposable
@@ -48,7 +48,7 @@ public sealed class RecoveryJournal : IDisposable
         object? external=null;
         if(m.SourceKind=="json"){
             var e=store.Config.ExternalSources[m.ExternalSourceId];
-            external=new{e.Url,e.ValuePointer,e.TimestampPointer,e.UnitPointer,e.InputUnit,e.OutputUnit,e.UnitAliasConfirmed,e.ValueType,e.MaxAgeSeconds,e.QualityPointer,e.ReliableQualityValue,e.AuthMode,e.AuthHeader};
+            external=new{Url=store.ExternalUrl(e),e.ValuePointer,e.TimestampPointer,e.UnitPointer,e.InputUnit,e.OutputUnit,e.UnitAliasConfirmed,e.ValueType,e.MaxAgeSeconds,e.QualityPointer,e.ReliableQualityValue,e.AuthMode,e.AuthHeader};
         }
         return Digest(JsonSerializer.SerializeToUtf8Bytes(new{m.SourceKind,source,destination,m.SourceAttribute,m.DestinationAttribute,m.WriteMode,m.CommandId,m.CommandPriority,
             destinationOrigin=dst.BaseUrl.TrimEnd('/').ToLowerInvariant(),dst.ApiVersion,destinationUser=dst.Username,

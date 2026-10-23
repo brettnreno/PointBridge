@@ -1,13 +1,13 @@
-# External JSON sources and multiple recipients — staged development
+# External JSON sources and multiple recipients
 
-These features are disabled by default. They are not installed in the running metasys-lab acceptance instance. No release package is being prepared.
+These features are disabled by default. Enable them explicitly only after reviewing source freshness, destination permissions, and the security upgrade notes in SECURITY-UPGRADE.txt.
 
 ## Configuration workflow
 
 1. In Admin / Connections explicitly enable extended sources/recipients. Configuration changes pause transfers.
 2. Save each additional Metasys recipient with its own URL, API version and service account. Save/Test/Clear credentials use the existing protected connection mechanisms. Human sign-in credentials remain separate.
 3. Add a JSON source with an HTTPS GET URL, JSON Pointer paths for its scalar value, observation timestamp and units, expected units/type, polling interval and maximum observation age. A timestamp must include a timezone. Sources start disabled.
-4. If necessary, select a header API key or bearer token and enter it locally. Blank secret preserves the saved secret only for the same origin/authentication settings; Clear removes it. OAuth token acquisition/renewal, query-string credentials and interactive API authentication are not implemented.
+4. Prefer a header API key or bearer token and enter it locally. Blank secret preserves the saved secret only for the same origin/authentication settings; Clear removes it. All saved URL query values are encrypted and masked with `__POINTBRIDGE_SAVED_QUERY__`. Keep that marker to retain them, enter a complete URL to replace them, or remove the query to clear them. Existing query URLs migrate automatically with recovery bindings preserved. OAuth token acquisition/renewal and interactive API authentication are not implemented.
 5. Test the saved source. This explicitly reads it without enabling transfers. Enable it only after reviewing its value, timestamp, units and quality semantics.
 6. In the mapping choose JSON as the source, the saved source and a recipient. Choose a destination point and validate it using the existing Metasys type/unit/writability/command preflight. Add another recipient as a separate mapping; review its destination and enable it explicitly.
 
